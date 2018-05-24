@@ -70,12 +70,16 @@ namespace {
 	  for(auto &BB: F){
 		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
 		  //addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
-		  errs() << "Innermost Loops: {" << /* code */ << "}\n";
+		  //errs() << "Innermost Loops: { }\n";// << /* code */ << "}\n";
+		  //errs() << "Edge values: { }\n";// << /* code */ << "}\n";
 		}
 		runOnBasicBlock(BB);
 	  }	
 
 	  blockNum = 0;
+
+	  errs() << "Innermost Loops: {}\n";// << /* code */ << "}\n";
+	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
 	  errs() << '\n';	
       return true;
     }
