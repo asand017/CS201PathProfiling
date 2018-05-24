@@ -38,11 +38,11 @@ namespace {
     static char ID;
     LLVMContext *Context;
     CS201PathProfiling() : FunctionPass(ID) {}
-    GlobalVariable *bbCounter = NULL;
-    GlobalVariable *BasicBlockPrintfFormatStr = NULL;
+    GlobalVariable *bbCounter = NULL; // CS210 --- This is were we declare the global variables that will count the edges and paths
+    GlobalVariable *BasicBlockPrintfFormatStr = NULL; // " "
     Function *printf_func = NULL;
 
-    //----------------------------------
+    //---------------------------------- CS210 --- This function is run once at the beginning of execution. We just initialize our variables/structures here.
     bool doInitialization(Module &M) {
 	  errs() << "\n----------Starting Path Profiling----------------\n";
 	  Context = &M.getContext();
@@ -51,27 +51,28 @@ namespace {
 	  Constant *format_const = ConstantDataArray::getString(*Context, finalPrintString);
 	  BasicBlockPrintfFormatStr = new GlobalVariable(M, llvm::ArrayType::get(llvm::IntegerType::get(*Context, 8), strlen(finalPrintString)+1), true, llvm::GlobalValue::PrivateLinkage, format_const, "BasicBlockPrintfFormatStr");
 	  printf_func = printf_prototype(*Context, &M);
-		
+	
+	  // CS210 --- We don't need this line, but it returns the name of the module.	
 	  //errs() << "Module: " << M.getName() << "\n";
 	
       return true;
     }
 
-    //----------------------------------
+    //---------------------------------- CS210 --- This function is run once at the end of execution.
     bool doFinalization(Module &M) {
 	  errs() << "-----------Finished Path Profiling-------------------\n";
       return false;
     }
     
-    //----------------------------------
+    //---------------------------------- CS210 --- This function is run for each 'function' in the input test file
+	// 
     bool runOnFunction(Function &F) override {
 	  errs() << "Function: " << F.getName() << "\n";
 
+	  // CS210 --- loop iterates over each basic block in each function in the input file, calling the runOnBasicBlock function on each encountered basic block
 	  for(auto &BB: F){
 		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
 		  //addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
-		  //errs() << "Innermost Loops: { }\n";// << /* code */ << "}\n";
-		  //errs() << "Edge values: { }\n";// << /* code */ << "}\n";
 		}
 		runOnBasicBlock(BB);
 	  }	
@@ -83,17 +84,26 @@ namespace {
 	  errs() << '\n';	
       return true;
     }
-
+	
+	// CS210 --- This function is run for each "basic block" in the input test file
 	bool runOnBasicBlock(BasicBlock &BB){
+	  
+      // CS210 --- outputting unique identifier for each encounter Basic Block
 	  errs() << "BasicBlock: b" << blockNum << '\n';//<< BB.getName() << '\n';
 	  blockNum++;
-	  //IRBuilder<> IRB(BB.getFirstInsertionPt());
 
+	  // CS210 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
+	  // The code to increment the edge and path counters will be very similiar to this code 
+	  //
+	  //IRBuilder<> IRB(BB.getFirstInsertionPt());
 	  //Value *loadAddr = IRB.CreateLoad(bbCounter);
 	  //Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
 	  //IRB.CreateStore(addAddr, bbCounter);
-	
+	  //
+	  
 	  errs() << '\n';	
+	  
+	  // CS210 --- loop iterates over each instruction in the current Basic Block and outputs the intermediate code
 	  for(auto &I: BB){
 	    errs() << I << "\n";	
 	  }
@@ -101,6 +111,9 @@ namespace {
 		
 	  return true;
 	}
+
+
+	// CS210 --- We will have to play with these "Printf" functions to output the "profiled program" output a little later	
 
 	//needed to print the bbCounter at end of main
 	void addFinalPrintf(BasicBlock& BB, LLVMContext *Context, GlobalVariable *bbCounter, GlobalVariable *var, Function *printf_func){
