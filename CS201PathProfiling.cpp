@@ -14,6 +14,7 @@
 #include "llvm/IR/CFG.h"
 #include "llvm/Analysis/DomPrinter.h"
 #include "llvm/Analysis/PostDominators.h"
+#include "llvm/Support/GenericDomTree.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -22,6 +23,7 @@ using namespace llvm;
 using namespace std;
 
 int blockNum = 0;
+vector< vector<BasicBlock*>> dominatorSets; //each element is a vector<BasicBlock*> (one per function). Will be cleared at the end of runOnFunction(...)
 
 namespace {
 
@@ -68,21 +70,79 @@ namespace {
       return false;
     }
     
+
+	//CS201 Helper function - print dominator sets of function
+	void printFuncDomSets(vector<vector<BasicBlock*>> &funcDomSet){
+		//index of funcDomSet number is the owner of element dominator set
+		
+		//NEED to ENUMERATE Basic Block names --- HERE
+	}
+
+	//CS201 New Helper Function - computer dominator set for given node (basic block) in function
+	vector<BasicBlock*> computeDomSet(Function &f, DomTreeNode *node, DominatorTree *domTree){
+		vector<BasicBlock*> basicblkDomSet;
+		//unsigned int i = 0;
+
+		DomTreeNode *start = node;
+		for(auto &BB: f){
+			DomTreeNode *bb = domTree->getNode(&BB);
+			if(domTree->dominates(bb, start)){
+				//if(!funcDomSet.empty()){
+					//errs() << '\n';
+					//errs() << "test\n";
+					//BB.printAsOperand(errs(), false);
+					//errs() << '\n';
+				//}
+				basicblkDomSet.push_back(&BB);
+			}
+		}
+		
+		//print out dom set for given node
+		errs() << "BasicBlock: ";
+		node->getBlock()->printAsOperand(errs(), false);
+		errs() << " Dominator Set\n";
+		errs() << "{";
+		for(unsigned int i = 0; i < basicblkDomSet.size(); i++){
+			basicblkDomSet[i]->printAsOperand(errs(), false);
+			if((i+1) == basicblkDomSet.size()){
+				continue;
+			}
+			errs() << ", ";
+		}
+		errs() << "}\n";
+		errs() << '\n';	
+
+		return basicblkDomSet;
+	}
+
     //---------------------------------- CS210 --- This function is run for each 'function' in the input test file
 	// 
     bool runOnFunction(Function &F) override {
+	  vector<vector<BasicBlock*>> funcDomSet; // each element is dominator set of the function's BBs
 	  errs() << "Function: " << F.getName() << "\n";
 
 	  //construct dominator tree for function F
-	  errs() << '\n';
+	  //errs() << '\n';
 	  DominatorTree *domTree = new DominatorTree();
 	  domTree->recalculate(F);
-	  domTree->print(errs());
-	  errs() << '\n';
+	  //domTree->print(errs());
+	  //errs() << '\n';
 
 	  // CS210 --- loop iterates over each basic block in each function in the input file, calling the runOnBasicBlock function on each encountered basic block
-	  for(auto &BB: F){
-		//BB.setName("b");
+	  for(auto &BB: F){		
+		//vector<BasicBlock*> basicblkDomSet; // dominator set for each basic block
+	  	DomTreeNode *bb = domTree->getNode(&BB);
+		funcDomSet.push_back(computeDomSet(F, bb, domTree));
+		//BasicBlock *b = bb->getBlock();
+		//for(auto &BB2: F){
+		//	DomTreeNode *bb2 = domTree->getNode(&BB2);
+
+			//if statement checks if block dominates every other block	
+			//if(domTree->dominates(bb, bb2)){
+				//basicblkDomSet.push_back(bb
+			//}
+		//}
+
 		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
 		  //BasicBlock bb = BB.getTerminator().get
 		  //addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
