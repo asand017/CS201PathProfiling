@@ -22,8 +22,7 @@
 using namespace llvm;
 using namespace std;
 
-int blockNum = 0;
-vector< vector<BasicBlock*>> dominatorSets; //each element is a vector<BasicBlock*> (one per function). Will be cleared at the end of runOnFunction(...)
+vector<BasicBlock*> BBList;
 
 namespace {
 
@@ -76,42 +75,44 @@ namespace {
 		//index of funcDomSet number is the owner of element dominator set
 		
 		//NEED to ENUMERATE Basic Block names --- HERE
+		errs() << "------------Printing Dominator Sets--------------:\n" << '\n';
+		for(unsigned int i = 0; i < funcDomSet.size(); i++){
+
+			errs() << "BasicBlock: ";
+			BBList[i]->printAsOperand(errs(), false);
+			errs() << " Dominator Set\n";
+			errs() << "{";
+
+			for(unsigned int j = 0; j < funcDomSet[i].size(); j++){
+				
+				funcDomSet[i][j]->printAsOperand(errs(), false);
+				if((j+1) == funcDomSet[i].size()){
+					continue;
+				}
+				errs() << ", ";
+			}
+
+			errs() << "}\n";
+			errs() << "\n";				
+		}
+		errs() << "----------------------END-----------------\n" << '\n';				
 	}
 
 	//CS201 New Helper Function - computer dominator set for given node (basic block) in function
 	vector<BasicBlock*> computeDomSet(Function &f, DomTreeNode *node, DominatorTree *domTree){
 		vector<BasicBlock*> basicblkDomSet;
-		//unsigned int i = 0;
 
 		DomTreeNode *start = node;
 		for(auto &BB: f){
 			DomTreeNode *bb = domTree->getNode(&BB);
+			//Check if current bb dominates given "node"
 			if(domTree->dominates(bb, start)){
-				//if(!funcDomSet.empty()){
-					//errs() << '\n';
-					//errs() << "test\n";
-					//BB.printAsOperand(errs(), false);
-					//errs() << '\n';
-				//}
 				basicblkDomSet.push_back(&BB);
 			}
 		}
 		
-		//print out dom set for given node
-		errs() << "BasicBlock: ";
-		node->getBlock()->printAsOperand(errs(), false);
-		errs() << " Dominator Set\n";
-		errs() << "{";
-		for(unsigned int i = 0; i < basicblkDomSet.size(); i++){
-			basicblkDomSet[i]->printAsOperand(errs(), false);
-			if((i+1) == basicblkDomSet.size()){
-				continue;
-			}
-			errs() << ", ";
-		}
-		errs() << "}\n";
-		errs() << '\n';	
 
+		//return dominator set for given node
 		return basicblkDomSet;
 	}
 
@@ -122,15 +123,16 @@ namespace {
 	  errs() << "Function: " << F.getName() << "\n";
 
 	  //construct dominator tree for function F
-	  //errs() << '\n';
 	  DominatorTree *domTree = new DominatorTree();
 	  domTree->recalculate(F);
 	  //domTree->print(errs());
-	  //errs() << '\n';
+
+	  for(auto &BB: F){
+		BBList.push_back(&BB);	
+	  }
 
 	  // CS210 --- loop iterates over each basic block in each function in the input file, calling the runOnBasicBlock function on each encountered basic block
 	  for(auto &BB: F){		
-		//vector<BasicBlock*> basicblkDomSet; // dominator set for each basic block
 	  	DomTreeNode *bb = domTree->getNode(&BB);
 		funcDomSet.push_back(computeDomSet(F, bb, domTree));
 		//BasicBlock *b = bb->getBlock();
@@ -152,11 +154,12 @@ namespace {
 		runOnBasicBlock(BB);
 	  }	
 
-	  blockNum = 0;
-
 	  errs() << "Innermost Loops: {}\n";// << /* code */ << "}\n";
 	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
-	  errs() << '\n';	
+	  errs() << '\n';
+
+	  printFuncDomSets(funcDomSet);
+	
       return true;
     }
 	
@@ -168,7 +171,7 @@ namespace {
 	  errs() << "BasicBlock: ";// << BB.getName() << '\n';
 	  BB.printAsOperand(errs(), false);//BB.getName() << '\n';
 	  errs() << '\n';
-	  blockNum++;
+	  //blockNum++;
 
 	  // CS210 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
 	  // The code to increment the edge and path counters will be very similiar to this code 
