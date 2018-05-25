@@ -10,6 +10,10 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IR/Dominators.h"
+#include "llvm/IR/CFG.h"
+#include "llvm/Analysis/DomPrinter.h"
+#include "llvm/Analysis/PostDominators.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -69,11 +73,22 @@ namespace {
     bool runOnFunction(Function &F) override {
 	  errs() << "Function: " << F.getName() << "\n";
 
+	  //construct dominator tree for function F
+	  errs() << '\n';
+	  DominatorTree *domTree = new DominatorTree();
+	  domTree->recalculate(F);
+	  domTree->print(errs());
+	  errs() << '\n';
+
 	  // CS210 --- loop iterates over each basic block in each function in the input file, calling the runOnBasicBlock function on each encountered basic block
 	  for(auto &BB: F){
+		//BB.setName("b");
 		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
+		  //BasicBlock bb = BB.getTerminator().get
 		  //addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
 		}
+
+
 		runOnBasicBlock(BB);
 	  }	
 
@@ -87,9 +102,12 @@ namespace {
 	
 	// CS210 --- This function is run for each "basic block" in the input test file
 	bool runOnBasicBlock(BasicBlock &BB){
+	  //BB.setName("b");
 	  
       // CS210 --- outputting unique identifier for each encounter Basic Block
-	  errs() << "BasicBlock: b" << blockNum << '\n';//<< BB.getName() << '\n';
+	  errs() << "BasicBlock: ";// << BB.getName() << '\n';
+	  BB.printAsOperand(errs(), false);//BB.getName() << '\n';
+	  errs() << '\n';
 	  blockNum++;
 
 	  // CS210 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
@@ -105,8 +123,12 @@ namespace {
 	  
 	  // CS210 --- loop iterates over each instruction in the current Basic Block and outputs the intermediate code
 	  for(auto &I: BB){
-	    errs() << I << "\n";	
+		if(isa<BranchInst>(I)){
+	    	//auto *nb = new BranchInst
+		}  
+	 	errs() << I << "\n";	
 	  }
+	  //errs() << BB.getTerminator() << '\n';
 	  errs() << '\n';
 		
 	  return true;
