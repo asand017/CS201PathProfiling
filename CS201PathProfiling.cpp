@@ -54,14 +54,32 @@ namespace {
     CS201PathProfiling() : FunctionPass(ID) {}
     GlobalVariable *bbCounter = NULL; // CS201 --- This is were we declare the global variables that will count the edges and paths
     GlobalVariable *BasicBlockPrintfFormatStr = NULL; // " "
+	vector<GlobalVariable*> edgeCounters;
     Function *printf_func = NULL;
 
     //---------------------------------- CS201 --- This function is run once at the beginning of execution. We just initialize our variables/structures here.
     bool doInitialization(Module &M) {
 	  errs() << "\n----------Starting Path Profiling----------------\n";
 	  Context = &M.getContext();
+	
+	  for(auto &F : M){
+		for(auto &BB : F){
+			for(auto &I : BB){
+				if(isa<BranchInst>(I)){
+					for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
+						edgeCounters.push_back(new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "edgeCounter")); 	
+					}	
+				}
+			}
+		}
+	  }	
+
+	  //errs() << edgeCounters.size() << "\n";
+	
 	  bbCounter = new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "bbCounter");
-	  const char *finalPrintString = "BB Count: %d\n";
+	  //const char *finalPrintString = "BB Count: %d\n";
+	  const char *finalPrintString = "Edge Counter: %d\n"; 
+
 	  Constant *format_const = ConstantDataArray::getString(*Context, finalPrintString);
 	  BasicBlockPrintfFormatStr = new GlobalVariable(M, llvm::ArrayType::get(llvm::IntegerType::get(*Context, 8), strlen(finalPrintString)+1), true, llvm::GlobalValue::PrivateLinkage, format_const, "BasicBlockPrintfFormatStr");
 	  printf_func = printf_prototype(*Context, &M);
@@ -245,7 +263,14 @@ namespace {
 	  for(auto &BB: F){		
 	  	DomTreeNode *bb = domTree->getNode(&BB);
 		funcDomSet.push_back(computeDomSet(F, bb, domTree));
+		
 
+	  	/*IRBuilder<> IRB(BB.getFirstInsertionPt()); //gets placed before the first instruction in the basic block
+	  	Value *loadAddr = IRB.CreateLoad(bbCounter);
+	  	Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+	  	IRB.CreateStore(addAddr, bbCounter);*/
+
+		//FIRST PASS to find EDGES
 		//finding back edges -----------------------------------------------------------------------------------------
 		for(auto &I: BB){
 			if(isa<BranchInst>(I)){
@@ -254,17 +279,36 @@ namespace {
 					Edge edge{&BB, cast<BranchInst>(I).getSuccessor(i), 0};
 					edges.push_back(edge);
 				}	
-			}	
+			}
+			
 		}
 		//errs() << '\n';
 		//finding back edges end ---------------------------------------------------------------------------------------
 
+		//SECOND PASS to increment edge counter
+		for(auto &I: BB){
+			if(isa<BranchInst>(I)){
+				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
+					for(unsigned int j = 0; j < edges.size(); j++){
+						if((edges[j].base == &BB) && (edges[j].end == cast<BranchInst>(I).getSuccessor(i))){
+							IRBuilder<> IRB(&I);
+							Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
+							Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+							IRB.CreateStore(addAddr, edgeCounters[j]);
+						}
+					}
+				}
+			}
+		}
+		//
 
-		//old code
-		//if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
-		  //BasicBlock bb = BB.getTerminator().get
-		  //addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
-		//}
+		//FINAL OUTPUT (CHANGE BBCOUNTER)
+		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
+		   for(unsigned int i = 0; i < edgeCounters.size(); i++){
+				//addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
+				addFinalPrintf(BB, Context, edgeCounters[i], BasicBlockPrintfFormatStr, printf_func);
+		   }
+		}
 
 		runOnBasicBlock(BB);
 	  }	
@@ -274,12 +318,12 @@ namespace {
 	
 	  //BBList contains in order basic block
 	  //finding/storing backedges ----------------------
-	  //errs() << "Printing edge list:\n";
+	  errs() << "Printing edge list:\n";
 	  int indBase = 0;
 	  int indEnd = 0;
 	  for(unsigned int i = 0; i < edges.size(); i++){
-		  //printEdge(edges[i]);
-		  //errs() << "\n";
+		  printEdge(edges[i]);
+		  errs() << "\n";
 
 		  //get heirarchy of edge base node
 		  for(unsigned int y = 0; y < BBList.size(); y++){
@@ -302,6 +346,7 @@ namespace {
 		  }
 	
 	  }
+	  errs() << "\n";
 
 	  //errs() << "\nback edges (count: " << backEdges.size() << "):\n";
 	  for(unsigned int i = 0; i < backEdges.size(); i++){
@@ -337,7 +382,19 @@ namespace {
 	  if(loops.size() == 0){
 		errs() << "Innermost Loops: {}\n";
 	  }
-	
+
+
+		
+	  //edge value code
+		
+	  //These 2 lines effectively add basicblocks to function
+	  //BasicBlock *entry = BasicBlock::Create(*Context, "ENTRY", &F, &(F.getEntryBlock()));
+	  //BasicBlock *exit = BasicBlock::Create(*Context, "EXIT", &F, &(F.getEntryBlock()));
+	  //CURRENTLY NEED TO CONVERT CFG TO DAG (LOOK AT NOTES, TABS) TO COMPUTE THE EDGE VALUES
+		
+	  for(unsigned int i = 0; i < backEdges.size(); i++){
+	  
+	  }
 	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
 	  errs() << '\n';
 
@@ -345,12 +402,13 @@ namespace {
 	  //printFuncDomSets(funcDomSet);
 
 	  //check that basic blocks stored in correct order (Use the below commented code to see the BasicBlock identifer mappings)
-	  /*errs() << "BBList size(" << BBList.size() << ")\n";
+	  /*errs() << "BBList size (" << BBList.size() << ")\n";
 	  for(unsigned int q = 0; q < BBList.size(); q++){
 	  	BBList[q]->printAsOperand(errs(), false);
-		errs() << " -> " << q << "\n\n";		
+		errs() << " -> b" << q << "\n";		
 	  }*/
 
+	  //empty BBList for use in next function
 	  BBList.clear();
 	
       return true;
@@ -367,12 +425,17 @@ namespace {
 
 	  // CS201 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
 	  // The code to increment the edge and path counters will be very similiar to this code 
-	  //
-	  //IRBuilder<> IRB(BB.getFirstInsertionPt());
-	  //Value *loadAddr = IRB.CreateLoad(bbCounter);
-	  //Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
-	  //IRB.CreateStore(addAddr, bbCounter);
-	  //
+	  
+	  /*for(unsigned int i = 0; i < edgeCounters.size(); i++){
+		  IRBuilder<> IRB
+
+      }*/
+
+	  /*IRBuilder<> IRB(BB.getFirstInsertionPt()); //gets placed before the first instruction in the basic block
+	  Value *loadAddr = IRB.CreateLoad(bbCounter);
+	  Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+	  IRB.CreateStore(addAddr, bbCounter);*/
+	  
 	  
 	  errs() << '\n';	
 	  
