@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 #include <stack>
+#include <algorithm>
 
 using namespace llvm;
 using namespace std;
@@ -133,7 +134,36 @@ namespace {
 			}
 		}
 
-		return loop;
+		//reorder final loop result in descending-CFG order
+		vector<BasicBlock*> o_loop; //ordered loop (initially empty)
+		//o_loop.reserve(loop.size());
+		bool done = false; //set to 'true' when we have ordered everything
+		vector<int> BlockPlace; //inorder index of BasicBlocks in loop
+		while(!done){
+			
+			for(unsigned int i = 0; i < loop.size(); i++){
+				for(unsigned int j = 0; j < BBList.size(); j++){
+					if(loop[i] == BBList[j]){
+						//errs() << j << "\n";
+						BlockPlace.push_back(j); //vector of indices into 'loop' vector
+						break;
+					}
+				}
+			}
+
+			//sorting
+			sort(BlockPlace.begin(), BlockPlace.end());
+			
+			//errs() << "size: " << BlockPlace.size() << "\n";
+			for(unsigned int i = 0; i < BlockPlace.size(); i++){
+				//errs() << BlockPlace[i] << "\n";
+				o_loop.push_back(BBList[BlockPlace[i]]);
+			}
+	
+			done = true;
+		}
+
+		return o_loop;
 	}
 
  	//CS201 Helper function to print edges with Ball_Laurus value
@@ -217,7 +247,6 @@ namespace {
 		funcDomSet.push_back(computeDomSet(F, bb, domTree));
 
 		//finding back edges -----------------------------------------------------------------------------------------
-		errs() << "Looking for backedges:\n";
 		for(auto &I: BB){
 			if(isa<BranchInst>(I)){
 				//I is the branch instruction, need to iterate over the instructions successor to find back edge
@@ -227,7 +256,7 @@ namespace {
 				}	
 			}	
 		}
-		errs() << '\n';
+		//errs() << '\n';
 		//finding back edges end ---------------------------------------------------------------------------------------
 
 
@@ -245,7 +274,7 @@ namespace {
 	
 	  //BBList contains in order basic block
 	  //finding/storing backedges ----------------------
-	  errs() << "Printing edge list:\n";
+	  //errs() << "Printing edge list:\n";
 	  int indBase = 0;
 	  int indEnd = 0;
 	  for(unsigned int i = 0; i < edges.size(); i++){
@@ -274,10 +303,10 @@ namespace {
 	
 	  }
 
-	  errs() << "\nback edges (count: " << backEdges.size() << "):\n";
+	  //errs() << "\nback edges (count: " << backEdges.size() << "):\n";
 	  for(unsigned int i = 0; i < backEdges.size(); i++){
-		printEdge(backEdges[i]);	
-		errs() << "\n";
+		//printEdge(backEdges[i]);	
+		//errs() << "\n";
 
 		//verify that 'end' dominates 'base'
 		if(domTree->dominates(backEdges[i].end, backEdges[i].base)){
@@ -285,7 +314,7 @@ namespace {
 			loops.push_back(computeLoop(backEdges[i]));
 		}
 	  }
-	  errs() << "\n";
+	  //errs() << "\n";
 	  //-----------------------------------------
 
 	
@@ -315,11 +344,11 @@ namespace {
 	  //check that dominator sets are correct
 	  //printFuncDomSets(funcDomSet);
 
-	  //check that basic blocks stored in correct order
+	  //check that basic blocks stored in correct order (Use the below commented code to see the BasicBlock identifer mappings)
 	  /*errs() << "BBList size(" << BBList.size() << ")\n";
 	  for(unsigned int q = 0; q < BBList.size(); q++){
 	  	BBList[q]->printAsOperand(errs(), false);
-		errs() << '\n';		
+		errs() << " -> " << q << "\n\n";		
 	  }*/
 
 	  BBList.clear();
