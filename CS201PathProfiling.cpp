@@ -22,7 +22,7 @@
 using namespace llvm;
 using namespace std;
 
-vector<BasicBlock*> BBList;
+vector<BasicBlock*> BBList; //maintain inorder list of basic blocks
 
 namespace {
 
@@ -68,7 +68,8 @@ namespace {
 	  errs() << "-----------Finished Path Profiling-------------------\n";
       return false;
     }
-    
+   
+	 
 
 	//CS201 Helper function - print dominator sets of function
 	void printFuncDomSets(vector<vector<BasicBlock*>> &funcDomSet){
@@ -95,7 +96,7 @@ namespace {
 			errs() << "}\n";
 			errs() << "\n";				
 		}
-		errs() << "----------------------END-----------------\n" << '\n';				
+		errs() << "----------------------END-------------------------:\n" << '\n';				
 	}
 
 	//CS201 New Helper Function - computer dominator set for given node (basic block) in function
@@ -131,25 +132,31 @@ namespace {
 		BBList.push_back(&BB);	
 	  }
 
-	  // CS210 --- loop iterates over each basic block in each function in the input file, calling the runOnBasicBlock function on each encountered basic block
+	  // CS201 --- loop iterates over each basic block in each function in the input file, calling the runOnBasicBlock function on each encountered basic block
 	  for(auto &BB: F){		
 	  	DomTreeNode *bb = domTree->getNode(&BB);
 		funcDomSet.push_back(computeDomSet(F, bb, domTree));
-		//BasicBlock *b = bb->getBlock();
-		//for(auto &BB2: F){
-		//	DomTreeNode *bb2 = domTree->getNode(&BB2);
 
-			//if statement checks if block dominates every other block	
-			//if(domTree->dominates(bb, bb2)){
-				//basicblkDomSet.push_back(bb
-			//}
-		//}
+		//finding back edges -----------------------------------------------------------------------------------------
+		errs() << "Looking for backedges:\n";
+		for(auto &I: BB){
+			if(isa<BranchInst>(I)){
+				//I is the branch instruction, need to iterate over the instructions successor to find back edge
+				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){	
+					cast<BranchInst>(I).getSuccessor(i)->printAsOperand(errs(), false);
+					errs() << '\n';
+				}	
+			}	
+		}
+		errs() << '\n';
+		//finding back edges end ---------------------------------------------------------------------------------------
 
-		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
+
+		//old code
+		//if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
 		  //BasicBlock bb = BB.getTerminator().get
 		  //addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
-		}
-
+		//}
 
 		runOnBasicBlock(BB);
 	  }	
@@ -158,22 +165,31 @@ namespace {
 	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
 	  errs() << '\n';
 
-	  printFuncDomSets(funcDomSet);
+	  //check that dominator sets are correct
+	  //printFuncDomSets(funcDomSet);
+
+	  //check that basic blocks stored in correct order
+	  /*errs() << "BBList size(" << BBList.size() << ")\n";
+	  for(unsigned int q = 0; q < BBList.size(); q++){
+	  	BBList[q]->printAsOperand(errs(), false);
+		errs() << '\n';		
+	  }*/
+
+	  BBList.clear();
 	
       return true;
     }
 	
-	// CS210 --- This function is run for each "basic block" in the input test file
+	// CS201 --- This function is run for each "basic block" in the input test file
 	bool runOnBasicBlock(BasicBlock &BB){
 	  //BB.setName("b");
 	  
-      // CS210 --- outputting unique identifier for each encounter Basic Block
+      // CS201 --- outputting unique identifier for each encounter Basic Block
 	  errs() << "BasicBlock: ";// << BB.getName() << '\n';
 	  BB.printAsOperand(errs(), false);//BB.getName() << '\n';
 	  errs() << '\n';
-	  //blockNum++;
 
-	  // CS210 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
+	  // CS201 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
 	  // The code to increment the edge and path counters will be very similiar to this code 
 	  //
 	  //IRBuilder<> IRB(BB.getFirstInsertionPt());
@@ -184,11 +200,11 @@ namespace {
 	  
 	  errs() << '\n';	
 	  
-	  // CS210 --- loop iterates over each instruction in the current Basic Block and outputs the intermediate code
+	  // CS201 --- loop iterates over each instruction in the current Basic Block and outputs the intermediate code
 	  for(auto &I: BB){
-		if(isa<BranchInst>(I)){
-	    	//auto *nb = new BranchInst
-		}  
+		//if(isa<BranchInst>(I)){
+
+		//}  
 	 	errs() << I << "\n";	
 	  }
 	  //errs() << BB.getTerminator() << '\n';
@@ -198,7 +214,7 @@ namespace {
 	}
 
 
-	// CS210 --- We will have to play with these "Printf" functions to output the "profiled program" output a little later	
+	// CS201 --- We will have to play with these "Printf" functions to output the "profiled program" output a little later	
 
 	//needed to print the bbCounter at end of main
 	void addFinalPrintf(BasicBlock& BB, LLVMContext *Context, GlobalVariable *bbCounter, GlobalVariable *var, Function *printf_func){
