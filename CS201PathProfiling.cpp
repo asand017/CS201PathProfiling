@@ -22,6 +22,13 @@
 using namespace llvm;
 using namespace std;
 
+// CS201 --- how we represent our edges
+struct Edge{
+	BasicBlock *base;
+	BasicBlock *end;
+	int value;
+};
+
 vector<BasicBlock*> BBList; //maintain inorder list of basic blocks
 
 namespace {
@@ -43,11 +50,11 @@ namespace {
     static char ID;
     LLVMContext *Context;
     CS201PathProfiling() : FunctionPass(ID) {}
-    GlobalVariable *bbCounter = NULL; // CS210 --- This is were we declare the global variables that will count the edges and paths
+    GlobalVariable *bbCounter = NULL; // CS201 --- This is were we declare the global variables that will count the edges and paths
     GlobalVariable *BasicBlockPrintfFormatStr = NULL; // " "
     Function *printf_func = NULL;
 
-    //---------------------------------- CS210 --- This function is run once at the beginning of execution. We just initialize our variables/structures here.
+    //---------------------------------- CS201 --- This function is run once at the beginning of execution. We just initialize our variables/structures here.
     bool doInitialization(Module &M) {
 	  errs() << "\n----------Starting Path Profiling----------------\n";
 	  Context = &M.getContext();
@@ -57,19 +64,23 @@ namespace {
 	  BasicBlockPrintfFormatStr = new GlobalVariable(M, llvm::ArrayType::get(llvm::IntegerType::get(*Context, 8), strlen(finalPrintString)+1), true, llvm::GlobalValue::PrivateLinkage, format_const, "BasicBlockPrintfFormatStr");
 	  printf_func = printf_prototype(*Context, &M);
 	
-	  // CS210 --- We don't need this line, but it returns the name of the module.	
-	  //errs() << "Module: " << M.getName() << "\n";
-	
       return true;
     }
 
-    //---------------------------------- CS210 --- This function is run once at the end of execution.
+    //---------------------------------- CS201 --- This function is run once at the end of execution.
     bool doFinalization(Module &M) {
 	  errs() << "-----------Finished Path Profiling-------------------\n";
       return false;
     }
    
-	 
+	void printEdge(Edge &e){
+		errs() << "(";
+		e.base->printAsOperand(errs(), false);
+		errs() << ",";
+		e.end->printAsOperand(errs(), false);
+		errs() << "," << e.value;
+		errs() << ")"; 
+	}
 
 	//CS201 Helper function - print dominator sets of function
 	void printFuncDomSets(vector<vector<BasicBlock*>> &funcDomSet){
@@ -121,6 +132,8 @@ namespace {
 	// 
     bool runOnFunction(Function &F) override {
 	  vector<vector<BasicBlock*>> funcDomSet; // each element is dominator set of the function's BBs
+	  vector<Edge> edges; //vector of edges (per function)
+
 	  errs() << "Function: " << F.getName() << "\n";
 
 	  //construct dominator tree for function F
@@ -128,6 +141,7 @@ namespace {
 	  domTree->recalculate(F);
 	  //domTree->print(errs());
 
+	  //get basic block list
 	  for(auto &BB: F){
 		BBList.push_back(&BB);	
 	  }
@@ -142,9 +156,9 @@ namespace {
 		for(auto &I: BB){
 			if(isa<BranchInst>(I)){
 				//I is the branch instruction, need to iterate over the instructions successor to find back edge
-				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){	
-					cast<BranchInst>(I).getSuccessor(i)->printAsOperand(errs(), false);
-					errs() << '\n';
+				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
+					Edge edge{&BB, cast<BranchInst>(I).getSuccessor(i), 0};
+					edges.push_back(edge);
 				}	
 			}	
 		}
@@ -160,6 +174,13 @@ namespace {
 
 		runOnBasicBlock(BB);
 	  }	
+
+	  errs() << "Printing edge list:\n";
+	  for(unsigned int i = 0; i < edges.size(); i++){
+			printEdge(edges[i]);
+			errs() << "\n";
+	  }
+	  errs() << "\n";
 
 	  errs() << "Innermost Loops: {}\n";// << /* code */ << "}\n";
 	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
