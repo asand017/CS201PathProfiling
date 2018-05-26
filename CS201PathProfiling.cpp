@@ -18,6 +18,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <stack>
 
 using namespace llvm;
 using namespace std;
@@ -72,7 +73,70 @@ namespace {
 	  errs() << "-----------Finished Path Profiling-------------------\n";
       return false;
     }
-   
+ 
+	//CS201 Helper Function to help compute loop (Insert function from algo. in lecture slides)
+	void Insert(stack<BasicBlock*> &Stack, vector<BasicBlock*> &loop, BasicBlock* m){
+		//Insert Algo. :
+		//
+		// if m not in Loop then
+		// 		Loop = Loop U {m}
+		//		push m onto Stack
+		// endif
+		// EndInsert
+		
+		bool isIn = false;
+		for(unsigned int i = 0; i < loop.size(); i++){
+			if(m == loop[i]){
+				isIn = true;
+			}
+		}
+		
+		if(!isIn){
+			loop.push_back(m);
+			Stack.push(m);
+		}		
+
+	}
+
+	//CS201 Helper function to compute loops
+	vector<BasicBlock*> computeLoop(Edge &backEdge){
+		//Loop Algo. :
+		//
+		// Given a back edge, N -> D	
+		//
+		// Stack = empty
+		// Loop = {D}
+		// Insert(N)
+		//
+		// While stack not empty do
+		//		pop m --> (top element of stack)
+		// 		for each p in pred(m) do 
+		//			Insert(p)
+		//		endfor
+		// endWhile
+
+		vector<BasicBlock*> loop;
+
+		stack<BasicBlock*> Stack; //empty stack
+		BasicBlock* N = backEdge.base;
+		BasicBlock* D = backEdge.end;
+		
+		loop.push_back(D);
+		Insert(Stack, loop, N);
+		while(!Stack.empty()){
+			BasicBlock* m = Stack.top();
+			Stack.pop();
+
+			for(auto it = pred_begin(m), et = pred_end(m); it != et; ++it){
+				BasicBlock* Pred = *it;
+				Insert(Stack, loop, Pred);
+			}
+		}
+
+		return loop;
+	}
+
+ 	//CS201 Helper function to print edges with Ball_Laurus value
 	void printEdge(Edge &e){
 		errs() << "(";
 		e.base->printAsOperand(errs(), false);
@@ -110,7 +174,7 @@ namespace {
 		errs() << "----------------------END-------------------------:\n" << '\n';				
 	}
 
-	//CS201 New Helper Function - computer dominator set for given node (basic block) in function
+	//CS201 Helper Function - computer dominator set for given node (basic block) in function
 	vector<BasicBlock*> computeDomSet(Function &f, DomTreeNode *node, DominatorTree *domTree){
 		vector<BasicBlock*> basicblkDomSet;
 
@@ -133,6 +197,7 @@ namespace {
     bool runOnFunction(Function &F) override {
 	  vector<vector<BasicBlock*>> funcDomSet; // each element is dominator set of the function's BBs
 	  vector<Edge> edges; //vector of edges (per function)
+	  vector<vector<BasicBlock*>> loops; //will hold all the loops found in the function
 
 	  errs() << "Function: " << F.getName() << "\n";
 
@@ -174,15 +239,76 @@ namespace {
 
 		runOnBasicBlock(BB);
 	  }	
-
+	  
+	  //store backedges here
+	  vector<Edge> backEdges;
+	
+	  //BBList contains in order basic block
+	  //finding/storing backedges ----------------------
 	  errs() << "Printing edge list:\n";
+	  int indBase = 0;
+	  int indEnd = 0;
 	  for(unsigned int i = 0; i < edges.size(); i++){
-			printEdge(edges[i]);
-			errs() << "\n";
+		  //printEdge(edges[i]);
+		  //errs() << "\n";
+
+		  //get heirarchy of edge base node
+		  for(unsigned int y = 0; y < BBList.size(); y++){
+		  	if(BBList[y] == edges[i].base){
+				indBase = y;	
+			}
+		  }
+
+		  //get heirarchy of edge end node
+		  for(unsigned int y = 0; y < BBList.size(); y++){
+		  	if(BBList[y] == edges[i].end){
+				indEnd = y;	
+			}
+		  }
+
+		  //if |base node| > |end node|, then edge[i] is a back edge
+		  if(indBase > indEnd){
+			backEdges.push_back(edges[i]);
+				
+		  }
+	
+	  }
+
+	  errs() << "\nback edges (count: " << backEdges.size() << "):\n";
+	  for(unsigned int i = 0; i < backEdges.size(); i++){
+		printEdge(backEdges[i]);	
+		errs() << "\n";
+
+		//verify that 'end' dominates 'base'
+		if(domTree->dominates(backEdges[i].end, backEdges[i].base)){
+			//pass each backedge into helper function to compute the loop (basicblock) list
+			loops.push_back(computeLoop(backEdges[i]));
+		}
 	  }
 	  errs() << "\n";
+	  //-----------------------------------------
 
-	  errs() << "Innermost Loops: {}\n";// << /* code */ << "}\n";
+	
+	  //Output Loops
+	  //errs() << "LOOP COUNT: " << loops.size() << "\n\n";
+
+	  for(unsigned int i = 0; i < loops.size(); i++){
+	  	errs() << "Innermost Loops: {";
+		for(unsigned int j = 0; j < loops[i].size(); j++){
+			loops[i][j]->printAsOperand(errs(), false);
+			
+			if((j+1) < loops[i].size()){
+				errs() << ",";
+			}
+		}
+		errs() << "}\n";
+
+      }
+		
+	  if(loops.size() == 0){
+		errs() << "Innermost Loops: {}\n";
+	  }
+	
 	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
 	  errs() << '\n';
 
