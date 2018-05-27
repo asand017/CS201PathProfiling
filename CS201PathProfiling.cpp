@@ -66,9 +66,14 @@ namespace {
 	  for(auto &F : M){
 		for(auto &BB : F){
 			for(auto &I : BB){
+				TerminatorInst *TI = BB.getTerminator();
+				for(unsigned int i = 0; i < TI->getNumSuccessors(); i++){
+					SplitCriticalEdge(TI, i, this);		
+				}		
+
 				if(isa<BranchInst>(I)){
 					for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
-						edgeCounters.push_back(new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "edgeCounter")); 	
+						edgeCounters.push_back(new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "edgeCounter")); 
 					}	
 				}
 			}
@@ -94,6 +99,34 @@ namespace {
       return false;
     }
  
+
+	//CS201 Helper Function to assign values to edges (DAG)
+	void AssignVal(vector<Edge> &edges){
+		//edge value assignment algorithm (Part 1 of 4 - Ball-Larus Algo.):
+		//
+		//for each vertex v in reverse topological order{
+		//	if v is a leaf vertex {
+		//		NumPaths(v) = 1
+		//  } else {
+		//		NumPaths(v) = 0
+		//		for each edge e = v->w {
+		//			Val(e) = NumPaths(v);
+		//			NumPaths(v) = NumPaths(v) + NumPaths(w);
+		//		}
+		//	}
+		//}
+
+		vector<BasicBlock*> topOrder; //topological ordering of 'vertices'
+
+		//errs() << "new size of edges: " << edges.size() << "\n";	
+		for(int i = edges.size() - 1; i >= 0; i--){
+
+			//errs() << i << "\n";
+		}
+		
+	}
+
+
 	//CS201 Helper Function to help compute loop (Insert function from algo. in lecture slides)
 	void Insert(stack<BasicBlock*> &Stack, vector<BasicBlock*> &loop, BasicBlock* m){
 		//Insert Algo. :
@@ -257,6 +290,7 @@ namespace {
 
 	  //get basic block list
 	  for(auto &BB: F){
+		BB.setName("b");
 		BBList.push_back(&BB);	
 	  }
 
@@ -283,10 +317,9 @@ namespace {
 			}
 			
 		}
-		//errs() << '\n';
 		//finding back edges end ---------------------------------------------------------------------------------------
 
-		//SECOND PASS to increment edge counter
+		//SECOND PASS to increment edge counter (EDGE PROFILING DONE HERE)
 		for(auto &I: BB){
 			if(isa<BranchInst>(I)){
 
@@ -411,13 +444,42 @@ namespace {
 	  //These 2 lines effectively add basicblocks to function
 	  //BasicBlock *entry = BasicBlock::Create(*Context, "ENTRY", &F, &(F.getEntryBlock()));
 	  //BasicBlock *exit = BasicBlock::Create(*Context, "EXIT", &F, &(F.getEntryBlock()));
+
 	  //CURRENTLY NEED TO CONVERT CFG TO DAG (LOOK AT NOTES, TABS) TO COMPUTE THE EDGE VALUES
-		
+	  BasicBlock *entry = &(F.front()); //value = 99
+	  BasicBlock *exit = &(F.back()); //value = 100 (to help distinguish between ENTRY and EXIT dummy edges
 	  for(unsigned int i = 0; i < backEdges.size(); i++){
-	  
+			//add dummy ENTRY edge
+			Edge Entry{entry, backEdges[i].end, 99};
+			edges.push_back(Entry);
+
+			//add dummy EXIT edge
+			Edge Exit{backEdges[i].base, exit, 100};
+			edges.push_back(Exit);
+
+			//remove back edge for edge list (graph)
+			for(unsigned int j = 0; j < edges.size(); j++){
+				if((((backEdges[i].base == edges[j].base) && (backEdges[i].end == edges[j].end))) && ((edges[j].value != 99) && (edges[j].value != 100))){
+					edges.erase(edges.begin()+(j));
+				}
+			}
 	  }
+
+	  //'edges' vector now represents the DAG representation of the function
+	  AssignVal(edges);
+	   
+
+	  errs() << "\n";
+	  for(unsigned int i = 0; i < edges.size(); i++){
+		  printEdge(edges[i]);
+		  errs() << "\n";
+	  }
+	  errs() << "\n";
+	
 	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
 	  errs() << '\n';
+
+
 
 	  //check that dominator sets are correct
 	  //printFuncDomSets(funcDomSet);
@@ -447,10 +509,6 @@ namespace {
 	  // CS201 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
 	  // The code to increment the edge and path counters will be very similiar to this code 
 	  
-	  /*for(unsigned int i = 0; i < edgeCounters.size(); i++){
-		  IRBuilder<> IRB
-
-      }*/
 
 	  /*IRBuilder<> IRB(BB.getFirstInsertionPt()); //gets placed before the first instruction in the basic block
 	  Value *loadAddr = IRB.CreateLoad(bbCounter);
