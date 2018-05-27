@@ -15,6 +15,7 @@
 #include "llvm/Analysis/DomPrinter.h"
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Support/GenericDomTree.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -288,15 +289,35 @@ namespace {
 		//SECOND PASS to increment edge counter
 		for(auto &I: BB){
 			if(isa<BranchInst>(I)){
+
+				/*if(cast<BranchInst>(I).getNumSuccessors() == 1){
+						IRBuilder<> IRB(&I);
+						Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
+						Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+						IRB.CreateStore(addAddr, edgeCounters[j]);
+				}*/
+
 				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
+
 					for(unsigned int j = 0; j < edges.size(); j++){
+						
 						if((edges[j].base == &BB) && (edges[j].end == cast<BranchInst>(I).getSuccessor(i))){
-							IRBuilder<> IRB(&I);
-							Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
-							Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
-							IRB.CreateStore(addAddr, edgeCounters[j]);
+						
+							if(cast<BranchInst>(I).getNumSuccessors() == 1){
+								IRBuilder<> IRB(&I);
+								Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
+								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+								IRB.CreateStore(addAddr, edgeCounters[j]);
+							}else{
+								IRBuilder<> IRB(cast<BranchInst>(I).getSuccessor(i)->getFirstInsertionPt());
+								Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
+								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+								IRB.CreateStore(addAddr, edgeCounters[j]);
+							}
+
 						}
 					}
+
 				}
 			}
 		}
