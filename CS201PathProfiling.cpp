@@ -460,7 +460,26 @@ namespace {
 	  //get basic block list
 	  for(auto &BB: F){
 		BB.setName("b");
-		BBList.push_back(&BB);	
+		BBList.push_back(&BB);
+	  }
+
+	  //attempts to fine tune basic block name for 'b0'
+	  for(auto &BB: F){
+		if(BB.getName() == "b"){
+			BB.setName("b0");
+			for(unsigned int i = 0; i < BBList.size(); i++){
+				if(BBList[i]->getName() == "b"){
+					BBList[i]->setName("b0");
+					break;
+				}
+			}
+			break;
+		}	
+	  }
+	  
+	  for(auto &BB: F){	
+		runOnBasicBlock(BB);
+			
 	  }
 
 	  // CS201 --- loop iterates over each basic block in each function in the input file, calling the runOnBasicBlock function on each encountered basic block
@@ -468,7 +487,9 @@ namespace {
 	  	DomTreeNode *bb = domTree->getNode(&BB);
 		funcDomSet.push_back(computeDomSet(F, bb, domTree));
 		
-
+		//for(auto &I: BB){
+		//	runOnBasicBlock(BB);
+		//}
 	  	/*IRBuilder<> IRB(BB.getFirstInsertionPt()); //gets placed before the first instruction in the basic block
 	  	Value *loadAddr = IRB.CreateLoad(bbCounter);
 	  	Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
@@ -553,7 +574,7 @@ namespace {
 		   }
 		}
 
-		runOnBasicBlock(BB);
+		//runOnBasicBlock(BB);
 	  }	
 	  
 	  //store backedges here
