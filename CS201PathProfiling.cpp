@@ -117,12 +117,48 @@ namespace {
 		//}
 
 		vector<BasicBlock*> topOrder; //topological ordering of 'vertices'
+		vector<int> numPaths; //index is aligned with 'topOrder'	
 
 		//errs() << "new size of edges: " << edges.size() << "\n";	
-		for(int i = edges.size() - 1; i >= 0; i--){
-
+		for(int i = BBList.size() - 1; i >= 0; i--){
 			//errs() << i << "\n";
+			topOrder.push_back(BBList[i]);	
+		}				
+	
+		numPaths.resize(topOrder.size(), 0);
+		/*errs() << "checking topological ordering:\n";
+		for(unsigned int i = 0; i < topOrder.size(); i++){
+			topOrder[i]->printAsOperand(errs(), false);
+			errs() << "\n";
+		}*/
+
+		int w; //index for 'w' in 'v->w'
+		for(unsigned int i = 0; i < topOrder.size(); i++){
+			//edges[i].end is a leaf
+			if(topOrder[i]->getTerminator()->getNumSuccessors() == 0){
+				numPaths[i] = 1;
+			}else{
+				numPaths[i] = 0;
+
+				for(unsigned int j = 0; j < edges.size(); j++){
+					if(edges[j].base == topOrder[i]){
+
+						//find index of 'end' basic block						
+						for(unsigned int y = 0; y < topOrder.size(); y++){
+							if(edges[j].end == topOrder[y]){
+								w = y;
+							}
+						}
+
+						//compute value for edge
+						edges[j].value = numPaths[i];
+						numPaths[i] = numPaths[i] + numPaths[w];
+					}
+				}
+			}
 		}
+		//errs() << i << "\n";
+		
 		
 	}
 
@@ -372,12 +408,12 @@ namespace {
 	
 	  //BBList contains in order basic block
 	  //finding/storing backedges ----------------------
-	  errs() << "Printing edge list:\n";
+	  //errs() << "Printing edge list:\n";
 	  int indBase = 0;
 	  int indEnd = 0;
 	  for(unsigned int i = 0; i < edges.size(); i++){
-		  printEdge(edges[i]);
-		  errs() << "\n";
+		  //printEdge(edges[i]);
+		  //errs() << "\n";
 
 		  //get heirarchy of edge base node
 		  for(unsigned int y = 0; y < BBList.size(); y++){
@@ -469,15 +505,47 @@ namespace {
 	  AssignVal(edges);
 	   
 
-	  errs() << "\n";
+	  //print out edge values
+	  for(unsigned int i = 0; i < loops.size(); i++){
+	  	errs() << "Edge Values: {";
+		for(unsigned int j = 0; j < loops[i].size(); j++){
+			
+			for(unsigned int v = 0; v < edges.size(); v++){
+				if(loops[i][j] == edges[v].base){
+					
+					for(unsigned int q = 0; q < loops[i].size(); q++){
+					
+						if(edges[v].end == loops[i][q]){					
+							printEdge(edges[v]);
+						}
+	
+					}
+				}
+			}			
+
+			if((j+1) < loops[i].size()){
+				errs() << ",";
+			}
+		}
+		errs() << "}\n";
+
+      }
+		
+	  if(loops.size() == 0){
+		errs() << "Edge values: {}\n";
+	  }
+
+/*
+	  //errs() << "\n";
 	  for(unsigned int i = 0; i < edges.size(); i++){
 		  printEdge(edges[i]);
 		  errs() << "\n";
 	  }
 	  errs() << "\n";
 	
-	  errs() << "Edge values: {}\n";// << /* code */ << "}\n";
-	  errs() << '\n';
+	  errs() << "Edge values: {
+	}\n";// << "}\n";
+	  errs() << '\n';*/
 
 
 
