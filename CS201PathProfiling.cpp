@@ -32,7 +32,9 @@ struct Edge{
 	int value;
 };
 
-vector<BasicBlock*> BBList; //maintain inorder list of basic blocks
+vector<BasicBlock*> BBList; //maintain inorder list of basic blocks (per function)
+vector<Edge> edges; //vector of edges (per function)
+vector<Edge> old_edges;
 
 namespace {
 
@@ -55,6 +57,7 @@ namespace {
     CS201PathProfiling() : FunctionPass(ID) {}
     GlobalVariable *bbCounter = NULL; // CS201 --- This is were we declare the global variables that will count the edges and paths
     GlobalVariable *BasicBlockPrintfFormatStr = NULL; // " "
+	GlobalVariable *EdgeProfilePrintfFormatStr = NULL;
 	vector<GlobalVariable*> edgeCounters;
     Function *printf_func = NULL;
 
@@ -72,8 +75,11 @@ namespace {
 				}		
 
 				if(isa<BranchInst>(I)){
+
 					for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
-						edgeCounters.push_back(new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "edgeCounter")); 
+						edgeCounters.push_back(new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "edgeCounter"));
+						Edge edge{&BB, cast<BranchInst>(I).getSuccessor(i), 0};
+						edges.push_back(edge);
 					}	
 				}
 			}
@@ -81,7 +87,8 @@ namespace {
 	  }	
 
 	  //errs() << edgeCounters.size() << "\n";
-	
+	  //old_edges = edges;	
+
 	  bbCounter = new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "bbCounter");
 	  //const char *finalPrintString = "BB Count: %d\n";
 	  const char *finalPrintString = "Edge Counter: %d\n"; 
@@ -439,8 +446,9 @@ namespace {
 	// 
     bool runOnFunction(Function &F) override {
 	  vector<vector<BasicBlock*>> funcDomSet; // each element is dominator set of the function's BBs
-	  vector<Edge> edges; //vector of edges (per function)
+	 // vector<Edge> edges; //vector of edges (per function)
 	  vector<vector<BasicBlock*>> loops; //will hold all the loops found in the function
+	  old_edges = edges;		
 
 	  errs() << "Function: " << F.getName() << "\n";
 
@@ -468,7 +476,7 @@ namespace {
 
 		//FIRST PASS to find EDGES
 		//finding back edges -----------------------------------------------------------------------------------------
-		for(auto &I: BB){
+		/*for(auto &I: BB){
 			if(isa<BranchInst>(I)){
 				//I is the branch instruction, need to iterate over the instructions successor to find back edge
 				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
@@ -477,7 +485,7 @@ namespace {
 				}	
 			}
 			
-		}
+		}*/
 		//finding back edges end ---------------------------------------------------------------------------------------
 
 		//SECOND PASS to increment edge counter (EDGE PROFILING DONE HERE)
@@ -520,7 +528,27 @@ namespace {
 		//FINAL OUTPUT (CHANGE BBCOUNTER)
 		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
 		   for(unsigned int i = 0; i < edgeCounters.size(); i++){
-				//addFinalPrintf(BB, Context, bbCounter, BasicBlockPrintfFormatStr, printf_func);
+			
+				string result = "";
+				if(i == 0){
+					result = "EDGE PROFILING:\n";
+				}	
+			
+				//const char *base = (edges[i].base->getName().str()).c_str();
+				if(old_edges[i].base->getName().str() == "b"){
+					result = result + old_edges[i].base->getName().str() + "0 -> " + old_edges[i].end->getName().str() + ": %d\n"; 
+				}else if(old_edges[i].end->getName().str() == "b"){
+					result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + "0: %d\n"; 
+				}else{
+					result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + ": %d\n"; 
+				}
+	
+	  			const char *finalPrintString = result.c_str();//" -> : %d\n"; 
+	  			Constant *format_const = ConstantDataArray::getString(*Context, finalPrintString);
+	  			BasicBlockPrintfFormatStr = new GlobalVariable(*(F.getParent()), llvm::ArrayType::get(llvm::IntegerType::get(*Context, 8), strlen(finalPrintString)+1), true, llvm::GlobalValue::PrivateLinkage, format_const, "BasicBlockPrintfFormatStr");
+	  			//printf_func = printf_prototype(*Context, &M);
+
+				//addFinalPrintf(BB, Context, edgeCounters[i], BasicBlockPrintfFormatStr, printf_func);
 				addFinalPrintf(BB, Context, edgeCounters[i], BasicBlockPrintfFormatStr, printf_func);
 		   }
 		}
@@ -626,6 +654,7 @@ namespace {
 			}
 	  }
 
+	  
 	  //'edges' vector now represents the DAG representation of the function
 	  AssignVal(edges);
 	   
@@ -674,13 +703,32 @@ namespace {
 		
 	  //need to compute maximal cost ST of (DAG) edges
 	  vector<Edge> MST = computeMST(edges);
- 
-
-
-
-	  /*errs() << "Outputting Maximal Spanning Tree:\n";
+ 	  //any edge from 'edges' not in MST are in the 'chord'
+	  vector<Edge> chords;
+	  for(unsigned int i = 0; i < edges.size(); i++){
+		bool notHere = true;
+	  	for(unsigned int j = 0; j < MST.size(); j++){
+			if((edges[i].base == MST[j].base) && (edges[i].end == MST[j].end) && (edges[i].value == MST[j].value)){
+				notHere = false;
+			}
+		}	
+		
+		if(notHere){
+			chords.push_back(edges[i]);	
+		}	
+	  }
+	
+	  /*
+	  errs() << "Outputting Maximal Spanning Tree:\n";
 	  for(unsigned int i = 0; i < MST.size(); i++){
 		  printEdge(MST[i]);
+	  	  errs() << "\n";
+  	  }
+	  errs() << "\n";
+
+	  errs() << "Outputting chord of Maximal Spanning Tree:\n";
+	  for(unsigned int i = 0; i < chords.size(); i++){
+		  printEdge(chords[i]);
 	  	  errs() << "\n";
   	  }
 	  errs() << "\n";*/
@@ -704,6 +752,8 @@ namespace {
 
 	  //empty BBList for use in next function
 	  BBList.clear();
+	  edges.clear();
+	  old_edges.clear();
 	
       return true;
     }
@@ -754,7 +804,7 @@ namespace {
 	
 	  Value *bbc = builder.CreateLoad(bbCounter);
 	  CallInst *call = builder.CreateCall2(printf_func, var_ref, bbc);
-	  call->setTailCall(false); 	
+	  call->setTailCall(false); 
 	}
 
   };
