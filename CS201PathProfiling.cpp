@@ -1,5 +1,5 @@
 /*
- * Authors: Aaron Sanders (email: asand017@ucr.edu)
+ * Authors: Aaron Sanders (email: asand017@ucr.edu), Alvin Thai (email: )
  * 
  */
 
@@ -98,7 +98,142 @@ namespace {
 	  errs() << "-----------Finished Path Profiling-------------------\n";
       return false;
     }
+
+
+ 	//CS201 Helper function to print edges with Ball_Laurus value
+	void printEdge(Edge &e){
+		errs() << "(";
+		e.base->printAsOperand(errs(), false);
+		errs() << ",";
+		e.end->printAsOperand(errs(), false);
+		errs() << "," << e.value;
+		errs() << ")"; 
+	}
  
+	//CS201 Helper Function to compute Maximal Spanning Tree
+	vector<Edge> computeMST(vector<Edge> &edges){
+		vector<Edge> MST; // will hold the maximal spanning tree
+		vector<BasicBlock*> MSTbb; //vertices of MST
+
+		vector<Edge> S = edges; //S
+
+		int maxVal;
+		int index;
+		bool addEdge = true;
+		while(MSTbb != BBList){
+			//travers S to find edge of maximal value
+			if(S.empty())
+				break;
+
+			//errs() << "Check on size of S: " << S.size() << "\n";
+			for(unsigned int i = 0; i < S.size(); i++){
+				if(i == 0){
+					maxVal = S[i].value;
+					index = i;
+					continue;
+				}
+					
+				if(S[i].value > maxVal){
+					maxVal = S[i].value;
+					index = i;
+				}
+			}
+			//after previous loop, now have candidate edge in S[index]
+
+			//MST is initially empty, so add the edge and record used vertices
+			if(MST.empty()){
+				//errs() << "empty MST check\n";
+				MST.push_back(S[index]);
+				MSTbb.push_back(S[index].base);
+				MSTbb.push_back(S[index].end);
+				//remove edge from S
+				S.erase(S.begin()+index);
+				continue;
+			}else{
+				//after the first iteration, need to verify the endpoints of candidate edge not in BBList
+				//errs() << "error check\n";
+				//errs() << MSTbb.size() << "\n";
+				for(unsigned int i = 0; i < MSTbb.size(); i++){
+					//errs() << "error check2\n";
+					if(S[index].base == MSTbb[i]){
+						//errs() << "S[index].base: ";
+						//S[index].base->printAsOperand(errs(), false);
+						//errs() << "\n";
+
+						//errs() << "MSTbb[" << i << "]: ";
+						//MSTbb[i]->printAsOperand(errs(), false);
+						//errs() << "\n";
+						
+						for(unsigned int k = 0; k < MSTbb.size(); k++){
+							if(S[index].end == MSTbb[k]){
+								//edge endpoints already covered in MST, so don't add edge
+								addEdge = false;
+							}
+						}
+					}
+				}
+
+				if(addEdge){
+					//errs() << "candidate edge is:";
+					//printEdge(S[index]);
+					//errs() << "\n";				
+
+					MST.push_back(S[index]);
+					//but need to make sure we don't add the same vertex twice to MSTbb
+					
+					bool addBase = true;
+					//check S[index].base
+					for(unsigned int i = 0; i < MSTbb.size(); i++){
+						if(S[index].base == MSTbb[i]){
+							addBase = false;
+							break;
+						}
+					}
+					
+					bool addEnd = true;
+					//check S[index].end
+					for(unsigned int i = 0; i < MSTbb.size(); i++){
+						if(S[index].end == MSTbb[i]){
+							addEnd = false;
+							break;
+						}
+					}
+	
+					if(addBase){
+						MSTbb.push_back(S[index].base);
+					}
+					
+					if(addEnd){
+						MSTbb.push_back(S[index].end);
+					}
+					
+					S.erase(S.begin()+index);
+				}else{//if addEdge = false
+					S.erase(S.begin()+index);
+					addEdge = true;
+				}
+				
+			}
+		}
+
+		/*errs() << "Outputting Maximal Spanning Tree:\n";
+		for(unsigned int i = 0; i < MST.size(); i++){
+			printEdge(MST[i]);
+			errs() << "\n";
+		}*/
+
+		/*errs() << "\n";
+				//verify MST contains each BB in BBList. If so, break out of loop
+				//vector<BasicBlock*> list; //used to check that MST spans every BB in BBList
+		errs() << "MSTbb list (size = " << MSTbb.size() << "): \n";
+		for(unsigned int x = 0; x < MSTbb.size(); x++){
+			MSTbb[x]->printAsOperand(errs(), false);
+			errs() << "\n";
+		}
+		errs() << "\n";*/
+	    
+		return MST;
+	}
 
 	//CS201 Helper Function to assign values to edges (DAG)
 	void AssignVal(vector<Edge> &edges){
@@ -252,16 +387,6 @@ namespace {
 		}
 
 		return o_loop;
-	}
-
- 	//CS201 Helper function to print edges with Ball_Laurus value
-	void printEdge(Edge &e){
-		errs() << "(";
-		e.base->printAsOperand(errs(), false);
-		errs() << ",";
-		e.end->printAsOperand(errs(), false);
-		errs() << "," << e.value;
-		errs() << ")"; 
 	}
 
 	//CS201 Helper function - print dominator sets of function
@@ -436,7 +561,7 @@ namespace {
 		  }
 	
 	  }
-	  errs() << "\n";
+	  //errs() << "\n";
 
 	  //errs() << "\nback edges (count: " << backEdges.size() << "):\n";
 	  for(unsigned int i = 0; i < backEdges.size(); i++){
@@ -504,8 +629,15 @@ namespace {
 	  //'edges' vector now represents the DAG representation of the function
 	  AssignVal(edges);
 	   
+	  /*errs() << "Printing DAG edges:\n";
+	  for(unsigned int i = 0; i < edges.size(); i++){
+		printEdge(edges[i]);
+		errs() << "\n";
+	  }
+	  errs() << "\n";*/
 
-	  //print out edge values
+	  //print out edge values with Ball-Larus values
+	  bool printedComma = false;
 	  for(unsigned int i = 0; i < loops.size(); i++){
 	  	errs() << "Edge Values: {";
 		for(unsigned int j = 0; j < loops[i].size(); j++){
@@ -517,37 +649,48 @@ namespace {
 					
 						if(edges[v].end == loops[i][q]){					
 							printEdge(edges[v]);
+							if((q+1) < loops[i].size()){
+								errs() << ",";
+								printedComma = true;
+							}
 						}
 	
 					}
 				}
 			}			
 
-			if((j+1) < loops[i].size()){
+			if(((j+1)) < loops[i].size() && !printedComma){
 				errs() << ",";
 			}
+			printedComma = false;
 		}
-		errs() << "}\n";
+		errs() << "}\n\n";
 
       }
 		
 	  if(loops.size() == 0){
-		errs() << "Edge values: {}\n";
+		errs() << "Edge values: {}\n\n";
 	  }
+		
+	  //need to compute maximal cost ST of (DAG) edges
+	  vector<Edge> MST = computeMST(edges);
+ 
 
-/*
-	  //errs() << "\n";
-	  for(unsigned int i = 0; i < edges.size(); i++){
+
+
+	  /*errs() << "Outputting Maximal Spanning Tree:\n";
+	  for(unsigned int i = 0; i < MST.size(); i++){
+		  printEdge(MST[i]);
+	  	  errs() << "\n";
+  	  }
+	  errs() << "\n";*/
+
+	  /*for(unsigned int i = 0; i < edges.size(); i++){
 		  printEdge(edges[i]);
 		  errs() << "\n";
 	  }
-	  errs() << "\n";
+	  errs() << "\n";*/
 	
-	  errs() << "Edge values: {
-	}\n";// << "}\n";
-	  errs() << '\n';*/
-
-
 
 	  //check that dominator sets are correct
 	  //printFuncDomSets(funcDomSet);
@@ -567,8 +710,6 @@ namespace {
 	
 	// CS201 --- This function is run for each "basic block" in the input test file
 	bool runOnBasicBlock(BasicBlock &BB){
-	  //BB.setName("b");
-	  
       // CS201 --- outputting unique identifier for each encounter Basic Block
 	  errs() << "BasicBlock: ";// << BB.getName() << '\n';
 	  BB.printAsOperand(errs(), false);//BB.getName() << '\n';
