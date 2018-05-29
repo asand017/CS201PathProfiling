@@ -242,6 +242,56 @@ namespace {
 		return MST;
 	}
 
+	//CS201 Helper Function to compute part 2 of ball larus algo.
+	vector<int> getChordIncs(vector<Edge> &chords, vector<Edge>& edges, vector<Edge>& MST){
+		BasicBlock* entry = BBList[0];
+		BasicBlock* exit = BBList[BBList.size() - 1];
+
+		vector<int> chordIncs;
+		while(chordIncs.size() != chords.size()-1){ //omit "exit --> entry" for it is just needed for the computation
+			vector<Edge> spanCycle;
+			for(unsigned int i = 0; i < chords.size(); i++){
+				bool usingChord = false;
+				bool reachedEnd = false; //final edge in spanCycle is "exit --> entry"
+				for(unsigned int k = 0; k < edges.size(); k++){
+					if(edges[k].base == exit && edges[k].end == entry){
+						//at end of span cycle
+						spanCycle.push_back(edges[k]);
+						break;
+					}
+
+					//span cycle intially empty
+					if(spanCycle.empty()){
+						spanCycle.push_back(edges[k]);
+						//if first edge is the query chord then we can proceed
+						if(edges[k].base == chords[i].base && edges[k].end == chords[i].end && edges[k].value == chords[i].value){
+							usingChord = true;
+						}
+						continue;
+					}	
+				
+					if(usingChord){
+						if(spanCycle.back().end == edges[k].base){
+							spanCycle.push_back(edges[k]);
+							continue;
+						}
+					}else{ //if usingChord = false, need to iterate through edges
+						
+
+					}
+
+	
+					if(edges[k].base == chords[i].base && edges[k].end == chords[i].end && edges[k].value == chords[i].value){
+						
+					}	
+				}
+			}
+			break;	
+		}	
+	
+		return chordIncs;
+	}
+
 	//CS201 Helper Function to assign values to edges (DAG)
 	void AssignVal(vector<Edge> &edges){
 		//edge value assignment algorithm (Part 1 of 4 - Ball-Larus Algo.):
@@ -487,15 +537,12 @@ namespace {
 	  	DomTreeNode *bb = domTree->getNode(&BB);
 		funcDomSet.push_back(computeDomSet(F, bb, domTree));
 		
-		//for(auto &I: BB){
-		//	runOnBasicBlock(BB);
-		//}
 	  	/*IRBuilder<> IRB(BB.getFirstInsertionPt()); //gets placed before the first instruction in the basic block
 	  	Value *loadAddr = IRB.CreateLoad(bbCounter);
 	  	Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
 	  	IRB.CreateStore(addAddr, bbCounter);*/
 
-		//FIRST PASS to find EDGES
+		//FIRST PASS to find EDGES (now done at Initialization
 		//finding back edges -----------------------------------------------------------------------------------------
 		/*for(auto &I: BB){
 			if(isa<BranchInst>(I)){
@@ -562,6 +609,10 @@ namespace {
 					result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + "0: %d\n"; 
 				}else{
 					result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + ": %d\n"; 
+				}
+				
+				if(i == edgeCounters.size() - 1){
+					result = result + "\n";
 				}
 	
 	  			const char *finalPrintString = result.c_str();//" -> : %d\n"; 
@@ -666,6 +717,10 @@ namespace {
 			//add dummy EXIT edge
 			Edge Exit{backEdges[i].base, exit, 100};
 			edges.push_back(Exit);
+			
+			//need edge from exit to entry for part 2 of ball larus algo
+			Edge Need{exit, entry, 0};
+			edges.push_back(Need);
 
 			//remove back edge for edge list (graph)
 			for(unsigned int j = 0; j < edges.size(); j++){
@@ -687,7 +742,9 @@ namespace {
 	  errs() << "\n";*/
 
 	  //print out edge values with Ball-Larus values
-	  bool printedComma = false;
+	  //bool printedComma = false;
+	  bool done = false;
+	  vector<BasicBlock*> seen;
 	  for(unsigned int i = 0; i < loops.size(); i++){
 	  	errs() << "Edge Values: {";
 		for(unsigned int j = 0; j < loops[i].size(); j++){
@@ -699,20 +756,55 @@ namespace {
 					
 						if(edges[v].end == loops[i][q]){					
 							printEdge(edges[v]);
-							if((q+1) < loops[i].size()){
-								errs() << ",";
-								printedComma = true;
+
+							if(seen.size() == 0){
+								seen.push_back(edges[v].base);
+								seen.push_back(edges[v].end);
+							}else{
+								bool here = false;
+								for(unsigned int e = 0; e < seen.size(); e++){
+									if(edges[v].base == seen[e]){
+										here = true;
+										break;
+									}
+								}
+								
+								if(!here)
+									seen.push_back(edges[v].base);
+
+								here = false;
+								for(unsigned int e = 0; e < seen.size(); e++){
+									if(edges[v].end == seen[e]){
+										here = true;
+										break;
+									}
+								}
+								
+								if(!here)
+									seen.push_back(edges[v].end);
 							}
+
+							//errs() << ",";
+							if(seen.size() == loops[i].size()){
+								done = true;
+							}
+
+							//if(!done){
+							//errs() << "seen size: " << seen.size() << "\n";
+							errs() << ",";
+								//printedComma = true;
+							//}
 						}
 	
 					}
 				}
 			}			
 
-			if(((j+1)) < loops[i].size() && !printedComma){
-				errs() << ",";
-			}
-			printedComma = false;
+			//errs() << "j: " << j << "\n";
+			//if((j+1) < loops[i].size() && !done){// && !printedComma){
+			//	errs() << ",";
+				//printedComma = false;
+			//}
 		}
 		errs() << "}\n\n";
 
@@ -722,8 +814,10 @@ namespace {
 		errs() << "Edge values: {}\n\n";
 	  }
 		
+	  //Ball Larus part 2
 	  //need to compute maximal cost ST of (DAG) edges
 	  vector<Edge> MST = computeMST(edges);
+
  	  //any edge from 'edges' not in MST are in the 'chord'
 	  vector<Edge> chords;
 	  for(unsigned int i = 0; i < edges.size(); i++){
@@ -738,6 +832,12 @@ namespace {
 			chords.push_back(edges[i]);	
 		}	
 	  }
+
+	  //vector of 'chord' increments
+	  vector<int> chordInc = getChordIncs(chords, edges, MST); //index matches with chord index
+	  //for(unsigned int i = 0; i < chords.size(); i++){
+			//need to identify unique cycle of spanning tree edges associated with chord 
+	  //}	
 	
 	  /*
 	  errs() << "Outputting Maximal Spanning Tree:\n";
@@ -745,20 +845,21 @@ namespace {
 		  printEdge(MST[i]);
 	  	  errs() << "\n";
   	  }
-	  errs() << "\n";
+	  errs() << "\n";*/
 
-	  errs() << "Outputting chord of Maximal Spanning Tree:\n";
+	  errs() << "Outputting chords of Maximal Spanning Tree:\n";
 	  for(unsigned int i = 0; i < chords.size(); i++){
 		  printEdge(chords[i]);
 	  	  errs() << "\n";
   	  }
-	  errs() << "\n";*/
+	  errs() << "\n";
 
-	  /*for(unsigned int i = 0; i < edges.size(); i++){
+	  errs() << "Printed out DAG edges" << "\n";
+	  for(unsigned int i = 0; i < edges.size(); i++){
 		  printEdge(edges[i]);
 		  errs() << "\n";
 	  }
-	  errs() << "\n";*/
+	  errs() << "\n";
 	
 
 	  //check that dominator sets are correct
@@ -782,30 +883,20 @@ namespace {
 	// CS201 --- This function is run for each "basic block" in the input test file
 	bool runOnBasicBlock(BasicBlock &BB){
       // CS201 --- outputting unique identifier for each encounter Basic Block
-	  errs() << "BasicBlock: ";// << BB.getName() << '\n';
-	  BB.printAsOperand(errs(), false);//BB.getName() << '\n';
+	  errs() << "BasicBlock: ";
+	  BB.printAsOperand(errs(), false);
 	  errs() << '\n';
 
 	  // CS201 --- These 4 lines incremented bbCounter each time a basic block was accessed in the real-time execution of the input program
 	  // The code to increment the edge and path counters will be very similiar to this code 
 	  
 
-	  /*IRBuilder<> IRB(BB.getFirstInsertionPt()); //gets placed before the first instruction in the basic block
-	  Value *loadAddr = IRB.CreateLoad(bbCounter);
-	  Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
-	  IRB.CreateStore(addAddr, bbCounter);*/
-	  
-	  
 	  errs() << '\n';	
 	  
 	  // CS201 --- loop iterates over each instruction in the current Basic Block and outputs the intermediate code
 	  for(auto &I: BB){
-		//if(isa<BranchInst>(I)){
-
-		//}  
 	 	errs() << I << "\n";	
 	  }
-	  //errs() << BB.getTerminator() << '\n';
 	  errs() << '\n';
 		
 	  return true;
