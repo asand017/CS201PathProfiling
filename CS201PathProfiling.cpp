@@ -223,23 +223,44 @@ namespace {
 			}
 		}
 
-		/*errs() << "Outputting Maximal Spanning Tree:\n";
-		for(unsigned int i = 0; i < MST.size(); i++){
-			printEdge(MST[i]);
-			errs() << "\n";
-		}*/
-
-		/*errs() << "\n";
-				//verify MST contains each BB in BBList. If so, break out of loop
-				//vector<BasicBlock*> list; //used to check that MST spans every BB in BBList
-		errs() << "MSTbb list (size = " << MSTbb.size() << "): \n";
-		for(unsigned int x = 0; x < MSTbb.size(); x++){
-			MSTbb[x]->printAsOperand(errs(), false);
-			errs() << "\n";
-		}
-		errs() << "\n";*/
-	    
 		return MST;
+	}
+
+	//CS201 Helper Function to compute path between successors of head of path and predecessors of the exit node
+	bool getPath(vector<Edge> &path, BasicBlock* succ_source, vector<BasicBlock*> &successors, BasicBlock* pred_source, vector<BasicBlock*> &predeccesors){
+		//when computing path, find edge from succ_source to pred[i]=succ[y], add it and add edge from pred[i]=succ[y] to pred_source
+
+		bool isPath = false;
+
+		//For the case when the first edge checked is the chord we're searching for a path for
+		//first iterate over exit's predeccesors
+		for(unsigned int i = 0; i < predeccesors.size(); i++){
+			for(unsigned int y = 0; y < successors.size(); y++){
+				if(predeccesors[i] == successors[y]){ // there is a direct path, crate
+					isPath = true;
+					for(unsigned int g = 0; g < edges.size(); g++){
+						if(edges[g].base == succ_source && edges[g].end == predeccesors[i]){
+							//succ_source --> pred[i]
+							path.push_back(edges[g]);
+
+							//pred[i] --> pred_source
+							for(unsigned int k = 0; k < edges.size(); k++){
+								if(edges[k].base == predeccesors[i] && edges[k].end == pred_source){
+									path.push_back(edges[k]);
+									break;
+								}
+							}
+							break;
+						}	
+					}
+					break;
+				}
+			}
+		}
+
+		//return True if there exists a path (putting the path into "path" vector) or false is no path exists
+	
+		return isPath;
 	}
 
 	//CS201 Helper Function to compute part 2 of ball larus algo.
@@ -247,47 +268,119 @@ namespace {
 		BasicBlock* entry = BBList[0];
 		BasicBlock* exit = BBList[BBList.size() - 1];
 
-		vector<int> chordIncs;
-		while(chordIncs.size() != chords.size()-1){ //omit "exit --> entry" for it is just needed for the computation
-			vector<Edge> spanCycle;
-			for(unsigned int i = 0; i < chords.size(); i++){
-				bool usingChord = false;
-				bool reachedEnd = false; //final edge in spanCycle is "exit --> entry"
-				for(unsigned int k = 0; k < edges.size(); k++){
-					if(edges[k].base == exit && edges[k].end == entry){
-						//at end of span cycle
-						spanCycle.push_back(edges[k]);
+		vector<BasicBlock*> exitPreds; //vector of the exit node's predecessors
+		//have to iterate over the edges to get the exit block predecessors
+		for(unsigned int i = 0; i < edges.size(); i++){
+			if(edges[i].base == exit && edges[i].end == entry){
+				continue;
+			}
+			
+			if(edges[i].end == exit){
+				exitPreds.push_back(edges[i].base);
+			}
+		}
+		
+		errs() << "printing exit block's predecessors:\n";	
+		for(unsigned int i = 0; i < exitPreds.size(); i++){
+			exitPreds[i]->printAsOperand(errs(), false);
+			errs() << "\n";
+		}
+		errs() << "\n";
+
+		vector<int> chordIncs; //index matches index of "chords" (ie. Inc(chords[i]) = chordIncs[i]) --> what will be returned
+		vector<Edge> spanCycle;
+		bool usingChord = false; //presume we are not using chord at begin of algo
+
+		for(unsigned int i = 0; i < chords.size(); i++){
+			
+			//if the current chord is EXIT --> ENTRY, break out of loop (we done)
+			if(chords[i].base == exit && chords[i].end == entry){
+				break;
+			}
+
+			errs() << "current chord: \n";
+			printEdge(chords[i]);
+			errs() << "\n\n";			
+
+			for(unsigned int x = 0; x < edges.size(); x++){
+				//first case: first edge in "edges" is the chord, so need to seach for the path to the chord
+				if(spanCycle.empty()){
+					if(edges[x].base == chords[i].base && edges[x].end == chords[i].end && edges[x].value == chords[i].value){
+						//set flag that using chord, so revert to default path finding (to 'exit' node)
+						usingChord = true;
+
+						//add edge to spanning Cycle
+						spanCycle.push_back(edges[x]);
+
+						//compute rest of cycle
+						vector<Edge> path;
+						
+						//get successor options after adding the edge to spanCycle
+						vector<BasicBlock*> end_succ;
+						BasicBlock* handle = spanCycle.back().end;//endpoint basicblock at the back of the current spanCycle	
+						for(unsigned int u = 0; u < edges.size(); u++){
+							if(edges[u].base == handle){
+								end_succ.push_back(edges[u].end);	
+							}	
+						}
+
+						errs() << "checking successors of last added edge's endpoint (when we already have the chord we need):\n";
+						for(unsigned int u = 0; u < end_succ.size(); u++){
+							end_succ[u]->printAsOperand(errs(), false);
+							errs() << "\n";
+						}
+						errs() << "\n";
+
+						getPath(path, handle, end_succ, exit, exitPreds);
+						spanCycle.insert(spanCycle.end(), path.begin(), path.end()); //append path to spanCycle
+
+						//add the backedge from "EXIT --> ENTRY" to finish spanCycle
+						for(unsigned int u = 0; u < edges.size(); u++){
+							if(edges[u].base == exit && edges[u].end == entry){ //at the dummy backedge
+								spanCycle.push_back(edges[u]);
+								
+								//output path (to check)
+								/*errs() << "Checking computed spanning cycle:\n";
+								for(unsigned int a = 0; a < spanCycle.size(); a++){
+									printEdge(spanCycle[a]);
+									errs() << "\n";
+								}
+								errs() << "\n";*/
+
+								break;
+							}
+						}
+
+						//spanCycle complete
 						break;
 					}
-
-					//span cycle intially empty
-					if(spanCycle.empty()){
-						spanCycle.push_back(edges[k]);
-						//if first edge is the query chord then we can proceed
-						if(edges[k].base == chords[i].base && edges[k].end == chords[i].end && edges[k].value == chords[i].value){
-							usingChord = true;
-						}
-						continue;
-					}	
-				
-					if(usingChord){
-						if(spanCycle.back().end == edges[k].base){
-							spanCycle.push_back(edges[k]);
-							continue;
-						}
-					}else{ //if usingChord = false, need to iterate through edges
-						
-
-					}
-
-	
-					if(edges[k].base == chords[i].base && edges[k].end == chords[i].end && edges[k].value == chords[i].value){
-						
-					}	
+				}else if(!spanCycle.empty() && !usingChord){
+					//...
 				}
+				break;
+			} 
+		
+			//compute chordIncs using spanCycle (add up values of each edge in spanCycle), store in "chordIncs" vector
+			
+			errs() << "Checking computed spanning cycle:\n";
+			for(unsigned int a = 0; a < spanCycle.size(); a++){
+				printEdge(spanCycle[a]);
+				errs() << "\n";
 			}
-			break;	
-		}	
+			errs() << "\n";
+			
+			//increment over spanCycle, add the value of each edge to "inc", the push back inc to chordIncs
+			int inc = 0;
+			for(unsigned int d = 0; d < spanCycle.size(); d++){
+				inc += spanCycle[d].value;
+			}
+			chordIncs.push_back(inc);
+
+			//each chord will have it's own spanCycle to compute, so clear it when done with chords[i]
+			spanCycle.clear();
+		}
+		//errs() << "---------------------------------\n\n";
+
 	
 		return chordIncs;
 	}
@@ -835,10 +928,16 @@ namespace {
 
 	  //vector of 'chord' increments
 	  vector<int> chordInc = getChordIncs(chords, edges, MST); //index matches with chord index
-	  //for(unsigned int i = 0; i < chords.size(); i++){
-			//need to identify unique cycle of spanning tree edges associated with chord 
-	  //}	
-	
+
+	  //output chordIncs
+	  errs() << "Inc(chords): \n";
+	  for(unsigned int i = 0; i < chordInc.size(); i++){
+		errs() << "Inc(";
+		printEdge(chords[i]);
+		errs() << "): " << chordInc[i] << "\n";
+	  }
+	  errs() << "\n";	
+
 	  /*
 	  errs() << "Outputting Maximal Spanning Tree:\n";
 	  for(unsigned int i = 0; i < MST.size(); i++){
