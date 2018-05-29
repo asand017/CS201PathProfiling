@@ -1,5 +1,5 @@
 /*
- * Authors: Aaron Sanders (email: asand017@ucr.edu), Alvin Thai (email: )
+ * Authors: Aaron Sanders (email: asand017@ucr.edu), Alvin Thai (email: athai005@ucr.edu)
  * 
  */
 
