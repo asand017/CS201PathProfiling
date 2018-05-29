@@ -58,7 +58,10 @@ namespace {
     GlobalVariable *bbCounter = NULL; // CS201 --- This is were we declare the global variables that will count the edges and paths
     GlobalVariable *BasicBlockPrintfFormatStr = NULL; // " "
 	GlobalVariable *EdgeProfilePrintfFormatStr = NULL;
-	vector<GlobalVariable*> edgeCounters;
+	vector<GlobalVariable*> edgeCounters; //for edge profiliing
+	vector<GlobalVariable*> R; //for path profiling instrumentation	
+	vector<GlobalVariable*> pathCounters; //for path profiling
+
     Function *printf_func = NULL;
 
     //---------------------------------- CS201 --- This function is run once at the beginning of execution. We just initialize our variables/structures here.
@@ -1113,7 +1116,242 @@ namespace {
 		printEdge(chords[i]);
 		errs() << "): " << chordInc[i] << "\n";
 	  }
-	  errs() << "\n";	
+	  errs() << "\n";
+
+
+      //Part 3 Ball-Larus: Instrumentation
+	  
+	  //Register Initialization Code
+	  //
+      //WS.add(ENTRY); /*'WS' --> Working Set<BasicBlock*> */
+	  //while not WS.empty() {
+	  //	vertex v = WS.remove();
+	  //	for each edge e = v->w
+	  //		if e is chord edge
+	  //			instrument(e, 'r=Inc(e)'));
+	  //		else if e is the only incoming edge of w
+	  //			WS.add(w);
+	  //		else instrument(e, 'r=0');
+	  //}
+
+
+	  vector<BasicBlock*> WS;
+
+	  vector<Edge> instrumentedChords; //holds instrumented chords
+
+	  vector<int> instrumentationR; //holds instrumentation data to be used when we add code to program, 'r=#'
+	  vector<Edge> corresEdgeR;
+
+	  vector<int> instrumentationM; // 'count[...]++'
+	  vector<Edge> corresEdgeM;
+
+	  WS.push_back(BBList[0]); //WS.add(ENTRY)
+	  while(!WS.empty()){
+	  	BasicBlock* v = WS.back();
+		WS.pop_back();
+	
+		//bool done = false;
+		bool isChord = false;
+		int chordIndex = 0;
+		for(unsigned int i = 0; i < edges.size(); i++){
+			if(edges[i].base == v){	
+				//if e is chord edge
+				for(unsigned int y = 0; y < chords.size()-1; y++){ //dont want to count dummy backedge
+					if(edges[i].base == chords[y].base && edges[i].end == chords[y].end && edges[i].value == chords[y].value){
+						//instrumentation[y] = chordInc[y];
+						isChord = true;
+						chordIndex = y;
+					}
+				}
+				
+				if(isChord){
+					instrumentationR.push_back(chordInc[chordIndex]);
+					corresEdgeR.push_back(edges[i]);
+					continue;
+				}
+				
+				//if e is the only incoming edge of w
+				int numW = 0;
+				for(unsigned int h = 0; h < edges.size(); h++){
+					if(edges[h].end == edges[i].end){
+						numW++;
+					}
+				}
+				
+				if(numW == 1){
+					WS.push_back(edges[i].end);
+					continue;
+				}
+			
+				instrumentationR.push_back(0);
+				corresEdgeR.push_back(edges[i]);
+				//else instrument (e, 'r=0')
+				//instrumentation,
+			}
+		}
+
+      } //by default if edge is not a chord, assign r=0
+
+
+	  //Memory Increment Code
+	  //
+	  //WS.add(EXIT)
+	  //while not WS.empty() {
+	  //	vertex w = WS.remove();
+	  //	for each edge e = v->w
+	  // 		if e is a chord edge {
+	  //			if e's instrumentation is 'r=Inc(e)'
+	  //				instrument(e, 'count[Inc(e)]++');
+	  //			else
+	  //				instrument(e, 'count[r+Inc(e)]++');
+	  //		} else if e is the only outgoing edge of v
+	  //			WS.add(v);
+	  //		else instrument(e, 'count[r]++');
+	  //}
+	 
+	  WS.push_back(BBList[BBList.size()-1]); //WS.add(EXIT)
+	  while(!WS.empty()){
+		BasicBlock*	w = WS.back();
+		WS.pop_back();
+		
+		bool isChord = false;
+		int chordIndex = 0;
+		for(unsigned int i = 0; i < edges.size(); i++){
+			if(edges[i].end == w){	
+				//if e is chord edge
+				for(unsigned int y = 0; y < chords.size()-1; y++){ //dont want to count dummy backedge
+					if(edges[i].base == chords[y].base && edges[i].end == chords[y].end && edges[i].value == chords[y].value){
+						//instrumentation[y] = chordInc[y];
+						isChord = true;
+						chordIndex = y;
+					}
+				}
+				
+				if(isChord){
+					//instrumentationR[chordIndex] = chordInc[chordIndex];
+					for(unsigned int n = 0; n < corresEdgeR.size(); n++){
+						//find edges[i]'s instrumentation
+						if(corresEdgeR[n].base == edges[i].base && corresEdgeR[n].end == edges[i].end && corresEdgeR[n].value == edges[i].value){
+							//use 'n' to index instrumentationR
+							if(instrumentationR[n] == chordInc[chordIndex]){
+								instrumentationM.push_back(chordInc[chordIndex]);
+								corresEdgeM.push_back(edges[i]);
+							}else{
+								instrumentationM.push_back(instrumentationR[n] + chordInc[chordIndex]);
+								corresEdgeM.push_back(edges[i]);
+							}
+						}
+					}
+	
+					continue;
+				}
+				
+				//if e is the only outgoing edge of v
+				int num = 0;
+				for(unsigned int h = 0; h < edges.size(); h++){
+					if(edges[h].base == edges[i].base){
+						num++;
+					}
+				}
+				
+				if(num == 1){
+					WS.push_back(edges[i].base);
+					continue;
+				}
+
+				
+				for(unsigned int n = 0; n < corresEdgeR.size(); n++){
+					//find edges[i]'s instrumentation
+					if(corresEdgeR[n].base == edges[i].base && corresEdgeR[n].end == edges[i].end && corresEdgeR[n].value == edges[i].value){
+						
+						instrumentationM.push_back(instrumentationR[n]);
+						corresEdgeM.push_back(edges[i]);
+						break;
+					}
+				}
+			}
+		}
+		
+	  }//by default
+
+	  // Register increment code
+	  //
+	  //for all uninstrumented chords c
+	  //	instrument(c, 'r+=Inc(c)')
+		
+	  int chordIndex = 0;
+	  vector<Edge> chordsToInstr;
+	  for(unsigned int x = 0; x < chords.size()-1; x++){
+		  bool chordInstrumented = false;
+		  for(unsigned int i = 0; i < corresEdgeM.size(); i++){
+			if(corresEdgeM[i].base == chords[x].base && corresEdgeM[i].end == chords[x].end && corresEdgeM[i].value == chords[x].value){
+				chordInstrumented = true;
+				chordIndex = x;
+			}
+		  }
+				
+		  if(!chordInstrumented){
+		  	for(unsigned int i = 0; i < corresEdgeR.size(); i++){
+				if(corresEdgeR[i].base == chords[x].base && corresEdgeR[i].end == chords[x].end && corresEdgeR[i].value == chords[x].value){
+					instrumentationR[i] = instrumentationR[i] + chordInc[x];
+					break;
+				}
+			}
+		  }
+	  }
+
+	  //accesible data: edges, chords, chordInc (1 viewer members in chordInc than in chords), we dont use chords[chords.size()-1] 
+
+	  for(auto &BB: F){
+		//runOnBasicBlock(BB);
+	
+		for(auto &I: BB){
+			if(isa<BranchInst>(I)){
+
+				/*if(cast<BranchInst>(I).getNumSuccessors() == 1){
+						IRBuilder<> IRB(&I);
+						Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
+						Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+						IRB.CreateStore(addAddr, edgeCounters[j]);
+				}*/
+
+				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
+
+					for(unsigned int j = 0; j < edges.size(); j++){
+						
+						if((edges[j].base == &BB) && (edges[j].end == cast<BranchInst>(I).getSuccessor(i))){
+						
+							/*if(cast<BranchInst>(I).getNumSuccessors() == 1){
+								IRBuilder<> IRB(&I);
+								Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
+								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+								IRB.CreateStore(addAddr, edgeCounters[j]);
+							}else{
+								IRBuilder<> IRB(cast<BranchInst>(I).getSuccessor(i)->getFirstInsertionPt());
+								Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
+								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
+								IRB.CreateStore(addAddr, edgeCounters[j]);
+							}*/
+
+						}
+					}
+
+				}
+			}
+		}
+
+	  }
+
+
+	  
+
+
+
+
+
+
+
+	
 
 	  /*
 	  errs() << "Outputting Maximal Spanning Tree:\n";
@@ -1128,14 +1366,14 @@ namespace {
 		  printEdge(chords[i]);
 	  	  errs() << "\n";
   	  }
-	  errs() << "\n";*/
+	  errs() << "\n";
 
 	  errs() << "Printed out DAG edges" << "\n";
 	  for(unsigned int i = 0; i < edges.size(); i++){
 		  printEdge(edges[i]);
 		  errs() << "\n";
 	  }
-	  errs() << "\n";
+	  errs() << "\n";*/
 	
 
 	  //check that dominator sets are correct
