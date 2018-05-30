@@ -35,6 +35,7 @@ struct Edge{
 vector<BasicBlock*> BBList; //maintain inorder list of basic blocks (per function)
 vector<Edge> edges; //vector of edges (per function)
 vector<Edge> old_edges;
+vector<vector<BasicBlock*>> loops; //will hold all the loops found in the function
 
 namespace {
 
@@ -59,7 +60,8 @@ namespace {
     GlobalVariable *BasicBlockPrintfFormatStr = NULL; // " "
 	GlobalVariable *EdgeProfilePrintfFormatStr = NULL;
 	vector<GlobalVariable*> edgeCounters; //for edge profiliing
-	vector<GlobalVariable*> R; //for path profiling instrumentation	
+	GlobalVariable* r = NULL;
+	//vector<GlobalVariable*> R; //for path profiling instrumentation	
 	vector<GlobalVariable*> pathCounters; //for path profiling
 
     Function *printf_func = NULL;
@@ -425,9 +427,9 @@ namespace {
 				break;
 			}
 
-			errs() << "current chord: \n";
-			printEdge(chords[i]);
-			errs() << "\n\n";			
+			//errs() << "current chord: \n";
+			//printEdge(chords[i]);
+			//errs() << "\n\n";			
 
 			for(unsigned int x = 0; x < edges.size(); x++){
 				if(spanCycle.empty()){
@@ -542,12 +544,12 @@ namespace {
 		
 			//compute chordIncs using spanCycle (add up values of each edge in spanCycle), store in "chordIncs" vector
 			
-			errs() << "Checking computed spanning cycle:\n";
+			/*errs() << "Checking computed spanning cycle:\n";
 			for(unsigned int a = 0; a < spanCycle.size(); a++){
 				printEdge(spanCycle[a]);
 				errs() << "\n";
 			}
-			errs() << "\n";
+			errs() << "\n";*/
 			
 			//increment over spanCycle, add the value of each edge to "inc", the push back inc to chordIncs
 			int inc = 0;
@@ -770,7 +772,7 @@ namespace {
     bool runOnFunction(Function &F) override {
 	  vector<vector<BasicBlock*>> funcDomSet; // each element is dominator set of the function's BBs
 	 // vector<Edge> edges; //vector of edges (per function)
-	  vector<vector<BasicBlock*>> loops; //will hold all the loops found in the function
+	 // vector<vector<BasicBlock*>> loops; //will hold all the loops found in the function
 	  old_edges = edges;		
 
 	  errs() << "Function: " << F.getName() << "\n";
@@ -868,33 +870,43 @@ namespace {
 
 		//FINAL OUTPUT (CHANGE BBCOUNTER)
 		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
-		   for(unsigned int i = 0; i < edgeCounters.size(); i++){
-			
-				string result = "";
-				if(i == 0){
-					result = "EDGE PROFILING:\n";
-				}	
-			
-				//const char *base = (edges[i].base->getName().str()).c_str();
-				if(old_edges[i].base->getName().str() == "b"){
-					result = result + old_edges[i].base->getName().str() + "0 -> " + old_edges[i].end->getName().str() + ": %d\n"; 
-				}else if(old_edges[i].end->getName().str() == "b"){
-					result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + "0: %d\n"; 
+		   for(unsigned int i = 0; i < edgeCounters.size() + 1; i++){
+				string result = "";				
+
+				if(i == edgeCounters.size()){
+					result = "PATH PROFILING:\n";
 				}else{
-					result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + ": %d\n"; 
-				}
 				
-				if(i == edgeCounters.size() - 1){
-					result = result + "\n";
+					//string result = "";
+					if(i == 0){
+						result = "EDGE PROFILING:\n";
+					}	
+				
+					//const char *base = (edges[i].base->getName().str()).c_str();
+					if(old_edges[i].base->getName().str() == "b"){
+						result = result + old_edges[i].base->getName().str() + "0 -> " + old_edges[i].end->getName().str() + ": %d\n"; 
+					}else if(old_edges[i].end->getName().str() == "b"){
+						result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + "0: %d\n"; 
+					}else{
+						result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + ": %d\n"; 
+					}
+					
+					if(i == edgeCounters.size() - 1){
+						result = result + "\n";
+					}
 				}
-	
+		
 	  			const char *finalPrintString = result.c_str();//" -> : %d\n"; 
 	  			Constant *format_const = ConstantDataArray::getString(*Context, finalPrintString);
 	  			BasicBlockPrintfFormatStr = new GlobalVariable(*(F.getParent()), llvm::ArrayType::get(llvm::IntegerType::get(*Context, 8), strlen(finalPrintString)+1), true, llvm::GlobalValue::PrivateLinkage, format_const, "BasicBlockPrintfFormatStr");
 	  			//printf_func = printf_prototype(*Context, &M);
 
 				//addFinalPrintf(BB, Context, edgeCounters[i], BasicBlockPrintfFormatStr, printf_func);
-				addFinalPrintf(BB, Context, edgeCounters[i], BasicBlockPrintfFormatStr, printf_func);
+				if(i < edgeCounters.size()){
+					addFinalPrintf(BB, Context, edgeCounters[i], BasicBlockPrintfFormatStr, printf_func);
+				}else{
+					addFinalPrintf(BB, Context, edgeCounters[i-1], BasicBlockPrintfFormatStr, printf_func);
+				}
 		   }
 		}
 
@@ -1110,13 +1122,13 @@ namespace {
 	  vector<int> chordInc = getChordIncs(chords, edges, MST); //index matches with chord index
 
 	  //output chordIncs
-	  errs() << "Inc(chords): \n";
+	  /*errs() << "Inc(chords): \n";
 	  for(unsigned int i = 0; i < chordInc.size(); i++){
 		errs() << "Inc(";
 		printEdge(chords[i]);
 		errs() << "): " << chordInc[i] << "\n";
 	  }
-	  errs() << "\n";
+	  errs() << "\n";*/
 
 
       //Part 3 Ball-Larus: Instrumentation
@@ -1137,13 +1149,19 @@ namespace {
 
 	  vector<BasicBlock*> WS;
 
-	  vector<Edge> instrumentedChords; //holds instrumented chords
-
+	  vector<Edge> instrumentedChords;
 	  vector<int> instrumentationR; //holds instrumentation data to be used when we add code to program, 'r=#'
-	  vector<Edge> corresEdgeR;
+	  for(unsigned int i = 0; i < edges.size(); i++){
+		instrumentationR.push_back(0);
+	  }
+
+	  //vector<Edge> corresEdgeR;
 
 	  vector<int> instrumentationM; // 'count[...]++'
-	  vector<Edge> corresEdgeM;
+	  for(unsigned int i = 0; i < edges.size(); i++){
+		instrumentationM.push_back(0);
+	  }
+	  //vector<Edge> corresEdgeM;
 
 	  WS.push_back(BBList[0]); //WS.add(ENTRY)
 	  while(!WS.empty()){
@@ -1156,17 +1174,18 @@ namespace {
 		for(unsigned int i = 0; i < edges.size(); i++){
 			if(edges[i].base == v){	
 				//if e is chord edge
-				for(unsigned int y = 0; y < chords.size()-1; y++){ //dont want to count dummy backedge
+				for(unsigned int y = 0; y < chords.size(); y++){ //dont want to count dummy backedge
 					if(edges[i].base == chords[y].base && edges[i].end == chords[y].end && edges[i].value == chords[y].value){
 						//instrumentation[y] = chordInc[y];
+						instrumentedChords.push_back(chords[y]);
 						isChord = true;
 						chordIndex = y;
 					}
 				}
 				
 				if(isChord){
-					instrumentationR.push_back(chordInc[chordIndex]);
-					corresEdgeR.push_back(edges[i]);
+					instrumentationR[i] = (chordInc[chordIndex]);
+					//corresEdgeR.push_back(edges[i]);
 					continue;
 				}
 				
@@ -1183,8 +1202,8 @@ namespace {
 					continue;
 				}
 			
-				instrumentationR.push_back(0);
-				corresEdgeR.push_back(edges[i]);
+				//instrumentationR.push_back(0);
+				//corresEdgeR.push_back(edges[i]);
 				//else instrument (e, 'r=0')
 				//instrumentation,
 			}
@@ -1212,6 +1231,12 @@ namespace {
 	  WS.push_back(BBList[BBList.size()-1]); //WS.add(EXIT)
 	  while(!WS.empty()){
 		BasicBlock*	w = WS.back();
+		//errs() << "selected w: ";
+		//w->printAsOperand(errs(), false);
+		//errs() << "\n\n";	
+
+		//errs() << "size of working set: " << WS.size() << "\n\n";
+
 		WS.pop_back();
 		
 		bool isChord = false;
@@ -1219,9 +1244,11 @@ namespace {
 		for(unsigned int i = 0; i < edges.size(); i++){
 			if(edges[i].end == w){	
 				//if e is chord edge
-				for(unsigned int y = 0; y < chords.size()-1; y++){ //dont want to count dummy backedge
+				for(unsigned int y = 0; y < chords.size(); y++){ //dont want to count dummy backedge
 					if(edges[i].base == chords[y].base && edges[i].end == chords[y].end && edges[i].value == chords[y].value){
 						//instrumentation[y] = chordInc[y];
+
+						instrumentedChords.push_back(chords[y]);
 						isChord = true;
 						chordIndex = y;
 					}
@@ -1229,23 +1256,31 @@ namespace {
 				
 				if(isChord){
 					//instrumentationR[chordIndex] = chordInc[chordIndex];
-					for(unsigned int n = 0; n < corresEdgeR.size(); n++){
+					/*for(unsigned int n = 0; n < edges.size(); n++){
 						//find edges[i]'s instrumentation
-						if(corresEdgeR[n].base == edges[i].base && corresEdgeR[n].end == edges[i].end && corresEdgeR[n].value == edges[i].value){
+						if(edges[n].base == edges[i].base && edges[n].end == edges[i].end && corresEdgeR[n].value == edges[i].value){
 							//use 'n' to index instrumentationR
 							if(instrumentationR[n] == chordInc[chordIndex]){
-								instrumentationM.push_back(chordInc[chordIndex]);
-								corresEdgeM.push_back(edges[i]);
+								instrumentationM[i] = (chordInc[chordIndex]);
+								//corresEdgeM.push_back(edges[i]);
 							}else{
-								instrumentationM.push_back(instrumentationR[n] + chordInc[chordIndex]);
+								instrumentationM[i] = (instrumentationR[n] + chordInc[chordIndex]);
 								corresEdgeM.push_back(edges[i]);
 							}
 						}
+					}*/
+					if(instrumentationR[i] == chordInc[chordIndex]){
+						instrumentationM[i] = chordInc[chordIndex]; 
+					}else{
+						instrumentationM[i] = instrumentationR[i] + chordInc[chordIndex];
 					}
 	
 					continue;
 				}
 				
+				//errs() << "w: ";
+				//edges[i].base->printAsOperand(errs(), false);
+				//errs() << "\n";
 				//if e is the only outgoing edge of v
 				int num = 0;
 				for(unsigned int h = 0; h < edges.size(); h++){
@@ -1253,23 +1288,39 @@ namespace {
 						num++;
 					}
 				}
-				
+					
+				//errs() << "num: " << num << "\n";
 				if(num == 1){
 					WS.push_back(edges[i].base);
 					continue;
 				}
 
+				//errs() << "corresEdgeR.size(): " << corresEdgeR.size() << "\n";			
 				
-				for(unsigned int n = 0; n < corresEdgeR.size(); n++){
+				//errs() << "current edge: ";
+				//printEdge(edges[i]);
+				//errs() << "\n";
+
+
+				/*for(unsigned int n = 0; n < corresEdgeR.size(); n++){
+					printEdge(corresEdgeR[n]);
+					errs() << "\n";				
+
 					//find edges[i]'s instrumentation
 					if(corresEdgeR[n].base == edges[i].base && corresEdgeR[n].end == edges[i].end && corresEdgeR[n].value == edges[i].value){
+						errs() << "\ncorresEdgeR: ";
+						printEdge(corresEdgeR[n]);
+						errs() << "\n";
+						errs() << "r = " << instrumentationR[n] << "\n\n";
 						
-						instrumentationM.push_back(instrumentationR[n]);
-						corresEdgeM.push_back(edges[i]);
+						instrumentationM[i] = (instrumentationR[n]);
+						//corresEdgeM.push_back(edges[i]);
 						break;
 					}
-				}
+				}*/
+				//instrumentationM[i] = instrumentationR[i];
 			}
+			//errs() << "instrumentions m[" << i << "] = " << instrumentationM[i] << "\n";
 		}
 		
 	  }//by default
@@ -1278,59 +1329,131 @@ namespace {
 	  //
 	  //for all uninstrumented chords c
 	  //	instrument(c, 'r+=Inc(c)')
-		
-	  int chordIndex = 0;
-	  vector<Edge> chordsToInstr;
-	  for(unsigned int x = 0; x < chords.size()-1; x++){
-		  bool chordInstrumented = false;
-		  for(unsigned int i = 0; i < corresEdgeM.size(); i++){
-			if(corresEdgeM[i].base == chords[x].base && corresEdgeM[i].end == chords[x].end && corresEdgeM[i].value == chords[x].value){
-				chordInstrumented = true;
-				chordIndex = x;
-			}
-		  }
-				
-		  if(!chordInstrumented){
-		  	for(unsigned int i = 0; i < corresEdgeR.size(); i++){
-				if(corresEdgeR[i].base == chords[x].base && corresEdgeR[i].end == chords[x].end && corresEdgeR[i].value == chords[x].value){
-					instrumentationR[i] = instrumentationR[i] + chordInc[x];
-					break;
+	  if(!chords.empty()){	
+		  for(unsigned int i = 0; i < chords.size(); i++){
+			bool instrmd = false;
+			for(unsigned int j = 0; j < instrumentedChords.size(); j++){
+				if(chords[i].base == instrumentedChords[j].base && chords[i].end == instrumentedChords[j].end && chords[i].value == instrumentedChords[j].value){
+					instrmd = true;	
+				}
+			}	
+
+			if(!instrmd){
+				for(unsigned int k = 0; k < edges.size(); k++){
+					if(edges[k].base == chords[i].base && edges[k].end == chords[i].end && edges[k].value == chords[i].value){
+						instrumentationR[k] += chordInc[i];
+					}
 				}
 			}
 		  }
 	  }
+	  /*int chordIndex = 0;
+	  vector<Edge> chordsToInstr;
+	  errs() << "chords size: " << chords.size() << "\n";
+	  if(chords.size() != 0){
+		  for(unsigned int x = 0; x < chords.size()-1; x++){
+			  bool chordInstrumented = false;
+			  for(unsigned int i = 0; i < corresEdgeM.size(); i++){
+				if(corresEdgeM[i].base == chords[x].base && corresEdgeM[i].end == chords[x].end && corresEdgeM[i].value == chords[x].value){
+					chordInstrumented = true;
+					chordIndex = x;
+				}
+			  }
+					
+			  if(!chordInstrumented){
+				for(unsigned int i = 0; i < corresEdgeR.size(); i++){
+					if(corresEdgeR[i].base == chords[x].base && corresEdgeR[i].end == chords[x].end && corresEdgeR[i].value == chords[x].value){
+						instrumentationR[i] = instrumentationR[i] + chordInc[x];
+						break;
+					}
+				}
+			  }
+		  }
+	  }*/
 
 	  //accesible data: edges, chords, chordInc (1 viewer members in chordInc than in chords), we dont use chords[chords.size()-1] 
 
+	
+	  //bbCounter = new GlobalVariable(M, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "bbCounter");
+	  /*for(unsigned int i = 0; i < corresEdgeR.size(); i++){
+
+	  }*/
+ 		
+	  //errs() << "corresEgdeR size: " << corresEdgeR.size() << "\n";
+	  //errs() << "instrumentationM size: " << instrumentationM.size() << "\n";
+	  //errs() << "instrumentationR size: " << instrumentationR.size() << "\n";
+
+	
+	  //Module* module = F.getParent();
+	  //for(unsigned int i = 0; i < edges.size(); i++){
+		//pathCounters.push_back(new GlobalVariable(*module, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "pathCounter"));
+	  //}
+
+
+	  //errs() << "path counters size: " << pathCounters.size() << "\n";
+
+	  /*for(unsigned int i = 0; i < edges.size(); i++){
+		errs() << instrumentationM[i] << "\n";
+	  }
+	  errs() << "\n";
+	  */
+
+	  //for(unsigned int i = 0; i < edges.size(); i++){
+		//errs() << instrumentationR[i] << "\n";
+	  //}
+	  //errs() << "\n";
+
+	  int i = 0;
 	  for(auto &BB: F){
 		//runOnBasicBlock(BB);
-	
+		if(&BB == BBList[0]){	
+		  //Module* module = F.getParent();
+		  //for(unsigned int i = 0; i < edges.size(); i++){
+			//errs() << "i: " << i << "\n";
+			//pathCounters.push_back(new GlobalVariable(*module, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "pathCounter"));
+		  //}
+			
+		  //r = new GlobalVariable(*module, Type::getInt32Ty(*Context), false, GlobalValue::InternalLinkage, ConstantInt::get(Type::getInt32Ty(*Context), 0), "register");
+
+		}
+		
+		//if(r
+		
 		for(auto &I: BB){
+			//at each edge, 
 			if(isa<BranchInst>(I)){
-
-				/*if(cast<BranchInst>(I).getNumSuccessors() == 1){
-						IRBuilder<> IRB(&I);
-						Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
-						Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
-						IRB.CreateStore(addAddr, edgeCounters[j]);
-				}*/
-
 				for(unsigned int i = 0; i < cast<BranchInst>(I).getNumSuccessors(); i++){
-
 					for(unsigned int j = 0; j < edges.size(); j++){
-						
+						//bool skip = false;
+						//we are at the edge
 						if((edges[j].base == &BB) && (edges[j].end == cast<BranchInst>(I).getSuccessor(i))){
-						
+							
+							//for(unsigned int z = 0; z < chords.size()-1; z++){
+							//	if(chords[z].base == edges[j].base && chords[z].end == edges[j].end && chords[z].value == edges[j].value){
+									
+									/*IRBuilder<> IRB(&I);
+									Value *loadAddr = IRB.CreateLoad(r);
+									Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), chordInc[j]), loadAddr);
+									IRB.CreateStore(addAddr, r);
+									skip = true;*/
+							//	}
+							//}
+							//if(edges[j].base =
+							//if(skip){
+							//	continue;
+							//} 
+							
+							
 							/*if(cast<BranchInst>(I).getNumSuccessors() == 1){
 								IRBuilder<> IRB(&I);
-								Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
-								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
-								IRB.CreateStore(addAddr, edgeCounters[j]);
+								Value *loadAddr = IRB.CreateLoad(pathCounters[j]);
+								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), instrumentationR[j]), loadAddr);
+								IRB.CreateStore(addAddr, pathCounters[j]);
 							}else{
 								IRBuilder<> IRB(cast<BranchInst>(I).getSuccessor(i)->getFirstInsertionPt());
-								Value *loadAddr = IRB.CreateLoad(edgeCounters[j]);
-								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), 1), loadAddr);
-								IRB.CreateStore(addAddr, edgeCounters[j]);
+								Value *loadAddr = IRB.CreateLoad(pathCounters[j]);
+								Value *addAddr = IRB.CreateAdd(ConstantInt::get(Type::getInt32Ty(*Context), instrumentationR[j]), loadAddr);
+								IRB.CreateStore(addAddr, pathCounters[j]);
 							}*/
 
 						}
@@ -1340,28 +1463,80 @@ namespace {
 			}
 		}
 
-	  }
+		if(F.getName().equals("main") && isa<ReturnInst>(BB.getTerminator())){
+		   //for(unsigned int i = 0; i < pathCounters.size(); i++){
+		
+				/*vector<int> distinct;
+				for(unsigned int t = 0; t < instrumentationR.size(); t++){
+					if(distinct.empty()){
+						distinct.push_back(instrumentationR[t]);
+						continue;
+					}
+					
+					bool add = true;
+					for(unsigned int a = 0; a < distinct.size(); a++){
+						if(instrumentationR[t] == distinct[a]){
+							add = false;	
+						}
+					}
 
-
-	  
-
-
-
-
-
-
-
+					if(add){
+						distinct.push_back(instrumentationR[t]);
+					}
+				}	
+				//need to reconstruct path - part 4 of ball larus
+				//int R
+				for(unsigned int t = 0; t < edges.size(); t++){
+					if(edges[t].base == BBList[0]){//starting at entry node
+							
+					}
+				}*/
 	
+				/*string result = "";
+				if(i == 0){
+					result = "PATH PROFILING:\n";
+				}*/	
+			
+				//const char *base = (edges[i].base->getName().str()).c_str();
+				//if(loops[0][0]->getName().str() == "b"){
+				//	result = result + "Path_" + loops[0][0]->getName().str() + "0_0: "; 
+				//}/*else if(old_edges[i].end->getName().str() == "b"){
+				//	result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + "0: %d\n"; 
+				//}else{
+				//	result = result + old_edges[i].base->getName().str() + " -> " + old_edges[i].end->getName().str() + ": %d\n"; 
+				//}*/
+				
+				//if(instrumentationR[i] != 0){
+				//if(!loops.empty()){
+				//	errs() << "loops size: " << loops.size() << "\n";
+				//	for(unsigned int i = 0; i < loops.size(); i++){
+			
+				//result = result + "%d\n";
+					//}
+				//}
 
-	  /*
-	  errs() << "Outputting Maximal Spanning Tree:\n";
+				/*const char *finalPrintString = result.c_str();//" -> : %d\n"; 
+				Constant *format_const = ConstantDataArray::getString(*Context, finalPrintString);
+				BasicBlockPrintfFormatStr = new GlobalVariable(*(F.getParent()), llvm::ArrayType::get(llvm::IntegerType::get(*Context, 8), strlen(finalPrintString)+1), true, llvm::GlobalValue::PrivateLinkage, format_const, "BasicBlockPrintfFormatStr");
+				//printf_func = printf_prototype(*Context, &M);
+
+				//addFinalPrintf(BB, Context, edgeCounters[i], BasicBlockPrintfFormatStr, printf_func);
+				addFinalPrintf(BB, Context, r, BasicBlockPrintfFormatStr, printf_func);*/
+				
+		   //}
+		}
+
+		i++;
+	  }
+	  
+	  /*errs() << "Outputting Maximal Spanning Tree:\n";
 	  for(unsigned int i = 0; i < MST.size(); i++){
 		  printEdge(MST[i]);
 	  	  errs() << "\n";
   	  }
 	  errs() << "\n";*/
 
-	  /*errs() << "Outputting chords of Maximal Spanning Tree:\n";
+	  /*errs() << "Outputting chords: \n";
 	  for(unsigned int i = 0; i < chords.size(); i++){
 		  printEdge(chords[i]);
 	  	  errs() << "\n";
@@ -1373,11 +1548,11 @@ namespace {
 		  printEdge(edges[i]);
 		  errs() << "\n";
 	  }
-	  errs() << "\n";*/
+	  errs() << "\n";
 	
 
 	  //check that dominator sets are correct
-	  //printFuncDomSets(funcDomSet);
+	  //printFuncDomSets(funcDomSet);*/
 
 	  //check that basic blocks stored in correct order (Use the below commented code to see the BasicBlock identifer mappings)
 	  /*errs() << "BBList size (" << BBList.size() << ")\n";
@@ -1390,6 +1565,7 @@ namespace {
 	  BBList.clear();
 	  edges.clear();
 	  old_edges.clear();
+	  loops.clear();
 	
       return true;
     }
@@ -1438,4 +1614,3 @@ namespace {
 
 char CS201PathProfiling::ID = 0;
 static RegisterPass<CS201PathProfiling> X("pathProfiling", "CS201PathProfiling Pass", false, false);
-
